@@ -17,7 +17,7 @@ export class GraphAnimator {
     // Se marcan por cambio de estado lógico (no por transición de color) para que los
     // rebuilds de setData — que recrean nodos con color null — no re-disparen pulsos.
     private pendingPulses = new Set<string>();
-    private pulses: Array<{ node: any; gfx: any; renderer: any; start: number; rgb: number; dur: number }> = [];
+    private pulses: Array<{ node: any; gfx: any; renderer: any; start: number; rgb: number; dur: number; beacon: boolean }> = [];
     private pulseRaf: number | null = null;
 
     constructor(app: App, settings: CTSettings) {
@@ -128,8 +128,10 @@ export class GraphAnimator {
                 // La geometría y el tamaño NO se tocan: el renderer tintea el círculo base.
                 if (!node.color || node.color.rgb !== targetColor) {
                     node.color = { a: 1, rgb: targetColor };
-                    for (const key of this.pendingPulses) {
-                        if (path.includes(key)) { this.spawnPulse(r, node, targetColor); break; }
+                    if (this.settings.pulseEnabled) {
+                        for (const key of this.pendingPulses) {
+                            if (path.includes(key)) { this.spawnPulse(r, node, targetColor); break; }
+                        }
                     }
                 }
             } else if (node.color != null) {
@@ -138,6 +140,31 @@ export class GraphAnimator {
         }
 
         this.applyLinkColors(r);
+        this.syncBeacon(r);
+    }
+
+    // Beacon: pulso indefinido sobre el nodo current. Se reconcilia en cada pasada
+    // (re-apunta al node object fresco tras rebuilds de setData, sigue al current
+    // cuando el agente avanza, y muere si el setting o el trace se apagan).
+    private syncBeacon(r: any): void {
+        const existing = this.pulses.find(p => p.beacon && p.renderer === r);
+        const want = this.settings.pulseIndefinite && this.enabled && this.currentNode;
+        if (!want) {
+            if (existing) this.killPulse(this.pulses.indexOf(existing));
+            return;
+        }
+        const node = r?.nodes?.find((n: any) => (n.id || "").includes(this.currentNode as string));
+        if (!node) {
+            if (existing) this.killPulse(this.pulses.indexOf(existing));
+            return;
+        }
+        if (existing) {
+            existing.node = node;
+            existing.rgb = this.hex(this.settings.colorCurrent);
+            existing.dur = this.settings.pulseDuration || 900;
+        } else {
+            this.spawnPulse(r, node, this.hex(this.settings.colorCurrent), true);
+        }
     }
 
     // Los links NO tienen slot nativo de color: su render() fuerza line.tint = colors.line
@@ -205,9 +232,8 @@ export class GraphAnimator {
     // círculo de un nodo — no hay global PIXI garantizado), redibujado por
     // frame para seguir al nodo mientras la simulación lo mueve.
 
-    private spawnPulse(r: any, node: any, rgb: number): void {
+    private spawnPulse(r: any, node: any, rgb: number, beacon = false): void {
         try {
-            if (!this.settings.pulseEnabled) return;
             if (!r?.hanger) return;
             const GraphicsCtor = node.circle?.constructor || r.links?.[0]?.arrow?.constructor;
             if (!GraphicsCtor) return;
@@ -215,7 +241,7 @@ export class GraphAnimator {
             gfx.eventMode = "none";
             gfx.zIndex = 1.5; // sobre nodos (1), bajo labels (2) si algo re-sortea
             r.hanger.addChild(gfx);
-            this.pulses.push({ node, gfx, renderer: r, start: performance.now(), rgb, dur: this.settings.pulseDuration || 900 });
+            this.pulses.push({ node, gfx, renderer: r, start: performance.now(), rgb, dur: this.settings.pulseDuration || 900, beacon });
             if (this.pulseRaf == null) this.tickPulses();
         } catch (_) { /* sin Graphics accesible, sin pulso */ }
     }
@@ -225,11 +251,17 @@ export class GraphAnimator {
             const now = performance.now();
             for (let i = this.pulses.length - 1; i >= 0; i--) {
                 const p = this.pulses[i];
-                const t = (now - p.start) / p.dur;
+                let t = (now - p.start) / p.dur;
                 try {
-                    if (t >= 1 || p.gfx.destroyed || !p.renderer?.hanger) {
+                    if (p.gfx.destroyed || !p.renderer?.hanger) {
                         this.killPulse(i);
                         continue;
+                    }
+                    if (t >= 1) {
+                        if (!p.beacon) { this.killPulse(i); continue; }
+                        // Beacon: pausa del 35% del ciclo entre ondas, luego reinicia
+                        if (t >= 1.35) { p.start = now; t = 0; }
+                        else { p.gfx.clear(); continue; }
                     }
                     const ease = 1 - (1 - t) * (1 - t);
                     const worldR = p.node.getSize() * p.renderer.nodeScale;

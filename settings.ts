@@ -9,6 +9,7 @@ export interface CTSettings {
     colorCommand: string;   // default de highlight_nodes
     edgeColoring: boolean;  // colorear aristas entre nodos trazados
     pulseEnabled: boolean;  // onda expansiva al pintar
+    pulseIndefinite: boolean; // el nodo actual pulsa en loop hasta que el agente avance
     pulseDuration: number;  // ms
 }
 
@@ -19,6 +20,7 @@ export const DEFAULT_SETTINGS: CTSettings = {
     colorCommand: "#FF6B35",
     edgeColoring: true,
     pulseEnabled: true,
+    pulseIndefinite: false,
     pulseDuration: 900,
 };
 
@@ -71,6 +73,15 @@ export class CTSettingTab extends PluginSettingTab {
                 .setValue(this.plugin.settings.pulseEnabled)
                 .onChange(async (v) => {
                     this.plugin.settings.pulseEnabled = v;
+                    await this.plugin.saveSettings();
+                }));
+        new Setting(containerEl)
+            .setName("Pulso indefinido en el nodo actual")
+            .setDesc("El nodo actual emite ondas continuamente hasta que el agente pasa a otro nodo. Mantiene el render del grafo activo mientras esté encendido.")
+            .addToggle(t => t
+                .setValue(this.plugin.settings.pulseIndefinite)
+                .onChange(async (v) => {
+                    this.plugin.settings.pulseIndefinite = v;
                     await this.plugin.saveSettings();
                 }));
         new Setting(containerEl)
