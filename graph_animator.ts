@@ -3,9 +3,11 @@
 // Un int crudo en node.color produce alpha NaN (u.a === undefined) y el nodo se vuelve invisible.
 import { App } from "obsidian";
 import { TraceEvent } from "./event_reader";
+import { CTSettings } from "./settings";
 
 export class GraphAnimator {
     private app: App;
+    private settings: CTSettings;
     private enabled = true;
     private visitedNodes = new Set<string>();
     private currentNode: string | null = null;
@@ -15,17 +17,26 @@ export class GraphAnimator {
     // Se marcan por cambio de estado lógico (no por transición de color) para que los
     // rebuilds de setData — que recrean nodos con color null — no re-disparen pulsos.
     private pendingPulses = new Set<string>();
-    private pulses: Array<{ node: any; gfx: any; renderer: any; start: number; rgb: number }> = [];
+    private pulses: Array<{ node: any; gfx: any; renderer: any; start: number; rgb: number; dur: number }> = [];
     private pulseRaf: number | null = null;
 
-    constructor(app: App) {
+    constructor(app: App, settings: CTSettings) {
         this.app = app;
+        this.settings = settings;
         this.app.workspace.on("layout-change", () => {
             if (this.enabled) this.patchAndRefresh();
         });
     }
 
     toggle(): void { this.enabled = !this.enabled; if (!this.enabled) this.reset(); }
+
+    /** Re-aplica colores/aristas con los settings actuales (llamado al guardar config). */
+    refresh(): void { this.patchAndRefresh(); }
+
+    private hex(color: string): number {
+        const v = parseInt(color.replace("#", ""), 16);
+        return isNaN(v) ? 0xffffff : v;
+    }
 
     processEvents(events: TraceEvent[]): void {
         for (const e of events) {
@@ -48,7 +59,7 @@ export class GraphAnimator {
             case "highlight_nodes": case "highlight_most_visited": case "highlight_least_visited":
                 for (const n of cmd.nodes || []) {
                     if (!this.commandHighlights.has(n)) this.pendingPulses.add(n);
-                    this.commandHighlights.set(n, cmd.color || "#FF6B35");
+                    this.commandHighlights.set(n, cmd.color || this.settings.colorCommand);
                 }
                 break;
             case "highlight_path": this.highlightedPath = cmd.nodes || []; break;
@@ -104,13 +115,13 @@ export class GraphAnimator {
             for (const [cn, cc] of this.commandHighlights) {
                 if (path.includes(cn)) { targetColor = parseInt(cc.replace("#",""), 16); break; }
             }
-            if (targetColor == null && this.currentNode && path.includes(this.currentNode)) targetColor = 0xFFD700;
+            if (targetColor == null && this.currentNode && path.includes(this.currentNode)) targetColor = this.hex(this.settings.colorCurrent);
             if (targetColor == null) {
                 let visited = false;
                 for (const vn of this.visitedNodes) { if (path.includes(vn)) { visited = true; break; } }
-                if (visited) targetColor = 0x4FC3F7; // cyan — distinguible del fill default (#B3B3B3) y del dorado current
+                if (visited) targetColor = this.hex(this.settings.colorVisited);
             }
-            if (targetColor == null && this.highlightedPath.includes(path)) targetColor = 0x00FF00;
+            if (targetColor == null && this.highlightedPath.includes(path)) targetColor = this.hex(this.settings.colorPath);
 
             if (targetColor != null) {
                 // Formato nativo de Obsidian: {a, rgb} — igual que renderer.colors.*
@@ -166,16 +177,22 @@ export class GraphAnimator {
 
     private applyLinkColors(r: any): void {
         if (!r?.links) return;
+        if (!this.settings.edgeColoring) {
+            for (const link of r.links) { if (link.$ctColor != null) link.$ctColor = null; }
+            return;
+        }
         this.patchLinkRender(r);
+        const gold = this.hex(this.settings.colorCurrent);
+        const neutral = this.hex(this.settings.colorVisited);
         for (const link of r.links) {
             const sc = link.source?.color;
             const tc = link.target?.color;
             if (sc && tc) {
-                // Dorada si toca el nodo current; hereda el color si ambos endpoints
-                // coinciden (cyan-cyan, verde de path, etc.); cyan neutro si son mixtos.
-                if (sc.rgb === 0xFFD700 || tc.rgb === 0xFFD700) link.$ctColor = 0xFFD700;
+                // Color de current si toca ese nodo; hereda el color si ambos endpoints
+                // coinciden (visitados, path, highlights); neutro (visitados) si son mixtos.
+                if (sc.rgb === gold || tc.rgb === gold) link.$ctColor = gold;
                 else if (sc.rgb === tc.rgb) link.$ctColor = sc.rgb;
-                else link.$ctColor = 0x4FC3F7;
+                else link.$ctColor = neutral;
             } else if (link.$ctColor != null) {
                 link.$ctColor = null;
             }
@@ -190,6 +207,7 @@ export class GraphAnimator {
 
     private spawnPulse(r: any, node: any, rgb: number): void {
         try {
+            if (!this.settings.pulseEnabled) return;
             if (!r?.hanger) return;
             const GraphicsCtor = node.circle?.constructor || r.links?.[0]?.arrow?.constructor;
             if (!GraphicsCtor) return;
@@ -197,18 +215,17 @@ export class GraphAnimator {
             gfx.eventMode = "none";
             gfx.zIndex = 1.5; // sobre nodos (1), bajo labels (2) si algo re-sortea
             r.hanger.addChild(gfx);
-            this.pulses.push({ node, gfx, renderer: r, start: performance.now(), rgb });
+            this.pulses.push({ node, gfx, renderer: r, start: performance.now(), rgb, dur: this.settings.pulseDuration || 900 });
             if (this.pulseRaf == null) this.tickPulses();
         } catch (_) { /* sin Graphics accesible, sin pulso */ }
     }
 
     private tickPulses(): void {
-        const DURATION = 900;
         const step = () => {
             const now = performance.now();
             for (let i = this.pulses.length - 1; i >= 0; i--) {
                 const p = this.pulses[i];
-                const t = (now - p.start) / DURATION;
+                const t = (now - p.start) / p.dur;
                 try {
                     if (t >= 1 || p.gfx.destroyed || !p.renderer?.hanger) {
                         this.killPulse(i);

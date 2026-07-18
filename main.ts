@@ -3,14 +3,19 @@ import { Plugin, Notice } from "obsidian";
 import { EventReader, TraceEvent } from "./event_reader";
 import { GraphAnimator } from "./graph_animator";
 import { TimelineView, TIMELINE_VIEW_TYPE } from "./timeline_view";
+import { CTSettings, DEFAULT_SETTINGS, CTSettingTab } from "./settings";
 
 export default class CognitiveTracePlugin extends Plugin {
     private reader: EventReader | null = null;
     private animator: GraphAnimator | null = null;
     private eventsBuffer: TraceEvent[] = [];  // compartido con TimelineView
+    settings: CTSettings = { ...DEFAULT_SETTINGS };
 
     async onload(): Promise<void> {
         console.log("[CognitiveTrace] onload — starting plugin");
+
+        // Cargar settings ANTES de crear el animator (comparte la referencia viva)
+        this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
 
         // Obtener ruta del vault (múltiples fallbacks por compatibilidad)
         let vaultPath = "";
@@ -33,7 +38,7 @@ export default class CognitiveTracePlugin extends Plugin {
         // Inicializar componentes
         try {
             this.reader = new EventReader(vaultPath);
-            this.animator = new GraphAnimator(this.app);
+            this.animator = new GraphAnimator(this.app, this.settings);
             console.log("[CognitiveTrace] EventReader and GraphAnimator initialized");
         } catch (e) {
             console.error("[CognitiveTrace] Failed to init components:", e);
@@ -102,12 +107,21 @@ export default class CognitiveTracePlugin extends Plugin {
             callback: () => this.animator?.reset(),
         });
 
+        // Panel de configuración
+        this.addSettingTab(new CTSettingTab(this.app, this));
+
         // Ribbon icon
         this.addRibbonIcon("activity", "Cognitive Trace", () => {
             this.activateTimeline();
         });
 
         console.log("[CognitiveTrace] Plugin loaded successfully");
+    }
+
+    async saveSettings(): Promise<void> {
+        await this.saveData(this.settings);
+        // Re-aplicar en vivo: los colores/toggles se leen del objeto settings compartido
+        this.animator?.refresh();
     }
 
     async onunload(): Promise<void> {
