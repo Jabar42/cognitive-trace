@@ -99,6 +99,55 @@
     text-align: right;
 }
 
+/* Filter toolbar */
+
+.trace-filters {
+    display: flex;
+    gap: 4px;
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--background-modifier-border);
+    flex-wrap: wrap;
+}
+
+.trace-filter-btn {
+    padding: 2px 10px;
+    font-size: 11px;
+    font-family: var(--font-monospace);
+    border: 1px solid var(--pipe-color, var(--text-muted));
+    border-radius: 10px;
+    background: var(--background-primary);
+    color: var(--pipe-color, var(--text-muted));
+    cursor: pointer;
+    opacity: 0.9;
+    transition: opacity 0.15s;
+}
+
+.trace-filter-btn:hover {
+    opacity: 1;
+}
+
+.trace-filter-btn.trace-filter-off {
+    opacity: 0.3;
+    border-color: var(--background-modifier-border);
+    color: var(--text-faint);
+}
+
+/* Pipe badge en cada evento */
+
+.trace-pipe-badge {
+    display: inline-block;
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 0 5px;
+    border-radius: 3px;
+    color: var(--pipe-color, var(--text-muted));
+    border: 1px solid var(--pipe-color, var(--text-muted));
+    min-width: 0;
+    flex-shrink: 0;
+}
+
 .trace-empty {
     padding: 16px;
     color: var(--text-muted);
