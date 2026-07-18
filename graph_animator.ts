@@ -11,6 +11,12 @@ export class GraphAnimator {
     private currentNode: string | null = null;
     private commandHighlights = new Map<string, string>();
     private highlightedPath: string[] = [];
+    // Pulsos: onda expansiva cuando un nodo se pinta por primera vez o pasa a current.
+    // Se marcan por cambio de estado lógico (no por transición de color) para que los
+    // rebuilds de setData — que recrean nodos con color null — no re-disparen pulsos.
+    private pendingPulses = new Set<string>();
+    private pulses: Array<{ node: any; gfx: any; renderer: any; start: number; rgb: number }> = [];
+    private pulseRaf: number | null = null;
 
     constructor(app: App) {
         this.app = app;
@@ -25,17 +31,25 @@ export class GraphAnimator {
         for (const e of events) {
             if (e.type === "command") this.executeCommand(e);
             else if ((e.tool === "okf_traverse" || e.tool === "okf_read") && e.params?.slug) {
-                this.visitedNodes.add(e.params.slug);
-                this.currentNode = e.params.slug;
+                const slug = e.params.slug;
+                if (!this.visitedNodes.has(slug) || this.currentNode !== slug) {
+                    this.pendingPulses.add(slug);
+                }
+                this.visitedNodes.add(slug);
+                this.currentNode = slug;
             }
         }
         this.patchAndRefresh();
+        this.pendingPulses.clear();
     }
 
     private executeCommand(cmd: TraceEvent): void {
         switch (cmd.action) {
             case "highlight_nodes": case "highlight_most_visited": case "highlight_least_visited":
-                for (const n of cmd.nodes || []) this.commandHighlights.set(n, cmd.color || "#FF6B35");
+                for (const n of cmd.nodes || []) {
+                    if (!this.commandHighlights.has(n)) this.pendingPulses.add(n);
+                    this.commandHighlights.set(n, cmd.color || "#FF6B35");
+                }
                 break;
             case "highlight_path": this.highlightedPath = cmd.nodes || []; break;
             case "clear_highlights": this.commandHighlights.clear(); this.highlightedPath = []; break;
@@ -48,6 +62,8 @@ export class GraphAnimator {
         this.currentNode = null;
         this.commandHighlights.clear();
         this.highlightedPath = [];
+        this.pendingPulses.clear();
+        this.clearPulses();
         this.patchAndRefresh();
     }
 
@@ -101,6 +117,9 @@ export class GraphAnimator {
                 // La geometría y el tamaño NO se tocan: el renderer tintea el círculo base.
                 if (!node.color || node.color.rgb !== targetColor) {
                     node.color = { a: 1, rgb: targetColor };
+                    for (const key of this.pendingPulses) {
+                        if (path.includes(key)) { this.spawnPulse(r, node, targetColor); break; }
+                    }
                 }
             } else if (node.color != null) {
                 node.color = null;
@@ -161,5 +180,76 @@ export class GraphAnimator {
                 link.$ctColor = null;
             }
         }
+    }
+
+    // ── Pulsos ───────────────────────────────────────────────────────────────
+    // Onda expansiva alrededor de un nodo recién pintado. El anillo es un
+    // PIXI.Graphics propio en el hanger (instanciado vía el constructor del
+    // círculo de un nodo — no hay global PIXI garantizado), redibujado por
+    // frame para seguir al nodo mientras la simulación lo mueve.
+
+    private spawnPulse(r: any, node: any, rgb: number): void {
+        try {
+            if (!r?.hanger) return;
+            const GraphicsCtor = node.circle?.constructor || r.links?.[0]?.arrow?.constructor;
+            if (!GraphicsCtor) return;
+            const gfx: any = new GraphicsCtor();
+            gfx.eventMode = "none";
+            gfx.zIndex = 1.5; // sobre nodos (1), bajo labels (2) si algo re-sortea
+            r.hanger.addChild(gfx);
+            this.pulses.push({ node, gfx, renderer: r, start: performance.now(), rgb });
+            if (this.pulseRaf == null) this.tickPulses();
+        } catch (_) { /* sin Graphics accesible, sin pulso */ }
+    }
+
+    private tickPulses(): void {
+        const DURATION = 900;
+        const step = () => {
+            const now = performance.now();
+            for (let i = this.pulses.length - 1; i >= 0; i--) {
+                const p = this.pulses[i];
+                const t = (now - p.start) / DURATION;
+                try {
+                    if (t >= 1 || p.gfx.destroyed || !p.renderer?.hanger) {
+                        this.killPulse(i);
+                        continue;
+                    }
+                    const ease = 1 - (1 - t) * (1 - t);
+                    const worldR = p.node.getSize() * p.renderer.nodeScale;
+                    const lw = Math.max(1, 1.5 / (p.renderer.scale || 1));
+                    p.gfx.clear();
+                    p.gfx.lineStyle(lw, p.rgb, 0.55 * (1 - t));
+                    p.gfx.drawCircle(0, 0, worldR * (1.15 + 1.1 * ease));
+                    p.gfx.x = p.node.x;
+                    p.gfx.y = p.node.y;
+                } catch (_) {
+                    this.killPulse(i);
+                }
+            }
+            if (this.pulses.length) {
+                // Mantener el render loop despierto mientras haya pulsos activos
+                const seen = new Set<any>();
+                for (const p of this.pulses) {
+                    if (seen.has(p.renderer)) continue;
+                    seen.add(p.renderer);
+                    try { p.renderer.changed?.(); } catch (_) {}
+                }
+                this.pulseRaf = requestAnimationFrame(step);
+            } else {
+                this.pulseRaf = null;
+            }
+        };
+        this.pulseRaf = requestAnimationFrame(step);
+    }
+
+    private killPulse(i: number): void {
+        const p = this.pulses[i];
+        try { p.gfx.parent?.removeChild(p.gfx); p.gfx.destroy(); } catch (_) {}
+        this.pulses.splice(i, 1);
+    }
+
+    private clearPulses(): void {
+        while (this.pulses.length) this.killPulse(this.pulses.length - 1);
+        if (this.pulseRaf != null) { cancelAnimationFrame(this.pulseRaf); this.pulseRaf = null; }
     }
 }
