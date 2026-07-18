@@ -40,14 +40,19 @@ export class GraphAnimator {
 
     processEvents(events: TraceEvent[]): void {
         for (const e of events) {
-            if (e.type === "command") this.executeCommand(e);
-            else if ((e.tool === "okf_traverse" || e.tool === "okf_read") && e.params?.slug) {
+            if (e.type === "command") { this.executeCommand(e); continue; }
+            if ((e.tool === "okf_traverse" || e.tool === "okf_read") && e.params?.slug) {
                 const slug = e.params.slug;
                 if (!this.visitedNodes.has(slug) || this.currentNode !== slug) {
                     this.pendingPulses.add(slug);
                 }
                 this.visitedNodes.add(slug);
                 this.currentNode = slug;
+            }
+            // Subgrafo del resultado (traverse/search): se pintan como visitados
+            // pero SIN pendingPulses — 60 pulsos simultáneos serían ruido visual.
+            if (Array.isArray(e.result_nodes)) {
+                for (const p of e.result_nodes) this.visitedNodes.add(p);
             }
         }
         this.patchAndRefresh();

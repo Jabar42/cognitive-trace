@@ -10,6 +10,7 @@ export interface TraceEvent {
     params?: Record<string, any>;
     exit_code?: number;
     duration_ms?: number;
+    result_nodes?: string[];  // paths del subgrafo resultado (traverse/search)
     // command fields
     action?: string;
     nodes?: string[];
