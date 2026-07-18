@@ -100,10 +100,43 @@ export class GraphAnimator {
                     this.commandHighlights.set(n, cmd.color || this.settings.colorCommand);
                 }
                 break;
+            case "highlight_session":
+                // El server ya resolvió los nodos de la sesión vía SQLite; si no
+                // envió ninguno, no hay nada que resaltar (sesión vacía).
+                for (const n of cmd.nodes || []) {
+                    if (!this.commandHighlights.has(n)) this.pendingPulses.add(n);
+                    this.commandHighlights.set(n, cmd.color || this.settings.colorCommand);
+                }
+                break;
             case "highlight_path": this.highlightedPath = cmd.nodes || []; break;
+            case "focus_cluster":
+                if (cmd.tag) { this.focusTag = cmd.tag; this.pendingPulses.add(cmd.tag); }
+                break;
             case "clear_highlights": this.commandHighlights.clear(); this.highlightedPath = []; break;
             case "reset_graph": this.reset(); break;
         }
+    }
+
+    // focus_cluster se resuelve en applyColors porque necesita acceso al renderer
+    // (links del grafo). Se marca aquí para la siguiente pasada.
+    private focusTag: string | null = null;
+
+    private applyFocusCluster(r: any): void {
+        if (!this.focusTag || !r?.links) return;
+        const tagId = "#" + this.focusTag;
+        const tagNode = r.nodes.find((n: any) => n.id === tagId || (n.type === "tag" && (n.id || "").includes(this.focusTag as string)));
+        if (!tagNode) return;
+        const connected: Set<string> = new Set();
+        for (const link of r.links) {
+            if (link.source === tagNode && link.target?.type !== "tag") connected.add(link.target.id);
+            else if (link.target === tagNode && link.source?.type !== "tag") connected.add(link.source.id);
+        }
+        const color = this.hex(this.settings.colorCommand);
+        for (const path of connected) {
+            if (!this.commandHighlights.has(path)) this.pendingPulses.add(path);
+            this.commandHighlights.set(path, "#" + color.toString(16).padStart(6, "0"));
+        }
+        this.focusTag = null; // one-shot
     }
 
     reset(): void {
@@ -111,6 +144,7 @@ export class GraphAnimator {
         this.readNodes.clear();
         this.currentNode = null;
         this.commandHighlights.clear();
+        this.focusTag = null;
         this.highlightedPath = [];
         this.pendingPulses.clear();
         this.revealQueue = [];
@@ -146,6 +180,9 @@ export class GraphAnimator {
 
     private applyColors(r: any): void {
         if (!r?.nodes) return;
+
+        // focus_cluster: resolver una vez, la primera pasada con renderer disponible
+        this.applyFocusCluster(r);
 
         for (const node of r.nodes) {
             const path: string = node.id || "";
