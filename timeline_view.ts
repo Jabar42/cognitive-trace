@@ -75,13 +75,11 @@ export class TimelineView extends ItemView {
             btn.createEl("span", { cls: "trace-chip-label", text: pipe.label });
             btn.createEl("span", { cls: "trace-chip-count", text: String(n) });
             btn.addEventListener("click", () => {
-                if (active) this.activePipes.delete(pipe.key);
+                // Leer el estado actual del Set, no la variable capturada en el closure
+                if (this.activePipes.has(pipe.key)) this.activePipes.delete(pipe.key);
                 else this.activePipes.add(pipe.key);
-                // Solo re-renderizar la lista, sin destruir el toolbar
-                const newActive = this.activePipes.has(pipe.key);
-                btn.classList.toggle("trace-filter-off", !newActive);
-                const c = this.countByPipe();
-                this.renderEventList(container, c);
+                btn.classList.toggle("trace-filter-off", !this.activePipes.has(pipe.key));
+                this.renderEventList(container, this.countByPipe());
             });
         }
 
