@@ -191,6 +191,26 @@
     white-space: nowrap;
 }
 
+/* ── Prompt separators ── */
+
+.trace-prompt-sep {
+    display: flex;
+    justify-content: center;
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.trace-prompt-sep-text {
+    font-size: 9px;
+    color: var(--text-faint);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    background: var(--background-primary);
+    padding: 1px 8px;
+    border-radius: 8px;
+    border: 1px solid var(--background-modifier-border);
+}
+
 .trace-empty {
     padding: 20px 16px;
     color: var(--text-muted);

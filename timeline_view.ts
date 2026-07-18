@@ -127,7 +127,20 @@ export class TimelineView extends ItemView {
             return;
         }
 
-        for (const event of filtered.slice(0, MAX_VISIBLE)) {
+        const visible = filtered.slice(0, MAX_VISIBLE);
+        let prevTs = 0;
+        const GAP = 60 * 1000; // 60s entre prompts
+
+        for (const event of visible) {
+            // Separador visual entre prompts del agente
+            const eventTs = new Date(event.ts).getTime();
+            if (prevTs > 0 && (eventTs - prevTs) > GAP) {
+                const sep = list.createEl("div", { cls: "trace-prompt-sep" });
+                const mins = Math.round((eventTs - prevTs) / 60000);
+                sep.createEl("span", { cls: "trace-prompt-sep-text", text: "— " + mins + " min de inactividad —" });
+            }
+            prevTs = eventTs;
+
             const row = list.createEl("div", { cls: "trace-event" });
 
             const left = row.createEl("div", { cls: "trace-event-left" });
