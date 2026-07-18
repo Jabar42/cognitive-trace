@@ -115,19 +115,32 @@ export class GraphAnimator {
     // prototipo de la clase link para escribir DESPUÉS del render nativo — nuestro tint
     // gana cada frame sin pelear con el lerp ni tocar geometría. El wrapper es stateless
     // (solo lee link.$ctColor), por lo que sobrevive rebuilds y hot-reloads sin zombies.
+    private static readonly LINK_PATCH_V = 2;
+
     private patchLinkRender(r: any): void {
         const sample = r.links?.[0];
         if (!sample) return;
         const proto = Object.getPrototypeOf(sample);
-        if (proto._ctOrigRender) return;
-        const orig = proto.render;
+        // El prototipo es de la clase de Obsidian y sobrevive hot-reloads del plugin:
+        // versionamos el patch y re-instalamos envolviendo SIEMPRE el original real.
+        if (proto._ctPatchV === GraphAnimator.LINK_PATCH_V) return;
+        const orig = proto._ctOrigRender || proto.render;
         proto._ctOrigRender = orig;
+        proto._ctPatchV = GraphAnimator.LINK_PATCH_V;
         proto.render = function () {
             orig.call(this);
             const c = this.$ctColor;
             if (c != null && this.line) {
                 this.line.tint = c;
                 if (this.arrow) this.arrow.tint = c;
+            }
+            // Capa intermedia: encima de las líneas de tema (zIndex 0), debajo de
+            // nodos/flechas (zIndex 1). El hanger tiene sortableChildren apagado,
+            // así que el re-sort se dispara manualmente y solo en transiciones.
+            const z = c != null ? 0.5 : 0;
+            if (this.px && this.px.zIndex !== z) {
+                this.px.zIndex = z;
+                this.renderer.hanger.sortChildren();
             }
         };
     }
