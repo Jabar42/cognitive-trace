@@ -1,25 +1,18 @@
 // timeline_view.ts — Panel lateral con lista cronológica de eventos
-// v2: filtros por tipo de evento (4 pipes) con código de color del grafo
+// v3: diseño compacto con contadores por pipe y badge X/Y visible/invisible
 import { ItemView, WorkspaceLeaf } from "obsidian";
 import { TraceEvent } from "./event_reader";
 
 export const TIMELINE_VIEW_TYPE = "cognitive-trace-timeline";
 
 const TOOL_ICONS: Record<string, string> = {
-    okf_traverse: "🔗",
-    okf_read: "📖",
-    okf_search: "🔍",
-    okf_graph: "🕸️",
-    okf_health: "💚",
-    okf_index: "📑",
-    okf_touch: "📊",
-    okf_new: "✨",
+    okf_traverse: "🔗", okf_read: "📖", okf_search: "🔍",
+    okf_graph: "🕸️", okf_health: "💚", okf_index: "📑",
+    okf_touch: "📊", okf_new: "✨",
 };
 
 interface FilterPipe {
-    key: string;
-    label: string;
-    color: string;
+    key: string; label: string; color: string;
     match: (e: TraceEvent) => boolean;
 }
 
@@ -29,7 +22,7 @@ const PIPES: FilterPipe[] = [
     { key: "read", label: "Lecturas", color: "#B388FF",
       match: (e) => e.type !== "command" && e.tool === "okf_read" },
     { key: "search", label: "Búsquedas", color: "#4FC3F7",
-      match: (e) => e.type !== "command" && (e.tool === "okf_search" || e.tool === "okf_graph" || e.tool === "okf_health" || e.tool === "okf_index" || e.tool === "okf_touch" || e.tool === "okf_new") },
+      match: (e) => e.type !== "command" && ["okf_search","okf_graph","okf_health","okf_index","okf_touch","okf_new"].includes(e.tool || "") },
     { key: "commands", label: "Comandos", color: "#FF6B35",
       match: (e) => e.type === "command" },
 ];
@@ -49,117 +42,121 @@ export class TimelineView extends ItemView {
     getDisplayText(): string { return "Cognitive Trace"; }
     getIcon(): string { return "activity"; }
 
-    async onOpen(): Promise<void> {
-        this.render();
-    }
+    async onOpen(): Promise<void> { this.render(); }
 
-    /** Llamado desde el plugin cuando llegan nuevos eventos */
-    refresh(_events: TraceEvent[]): void {
-        this.render();
-    }
+    refresh(_events: TraceEvent[]): void { this.render(); }
 
     private render(): void {
         const container = this.containerEl.children[1] as HTMLElement;
-        if (!container) {
-            requestAnimationFrame(() => this.render());
-            return;
-        }
+        if (!container) { requestAnimationFrame(() => this.render()); return; }
         container.empty();
         container.addClass("cognitive-trace-timeline");
 
-        // Header
+        // ── Header ──
         const header = container.createEl("div", { cls: "trace-header" });
-        header.createEl("span", { cls: "trace-header-title", text: "Cognitive Trace" });
-        header.createEl("span", { cls: "trace-header-count", text: `${this.events.length} eventos` });
+        const hLeft = header.createEl("div", { cls: "trace-header-left" });
+        hLeft.createEl("span", { cls: "trace-header-title", text: "Cognitive Trace" });
 
         const clearBtn = header.createEl("button", { cls: "trace-clear-btn", text: "Clear" });
-        clearBtn.addEventListener("click", () => {
-            this.events.length = 0;
-            this.render();
-        });
+        clearBtn.addEventListener("click", () => { this.events.length = 0; this.render(); });
 
-        // Filter toolbar
+        // ── Filters ──
+        const counts = this.countByPipe();
         const toolbar = container.createEl("div", { cls: "trace-filters" });
         for (const pipe of PIPES) {
+            const active = this.activePipes.has(pipe.key);
+            const n = counts[pipe.key] || 0;
             const btn = toolbar.createEl("button", {
-                cls: "trace-filter-btn" + (this.activePipes.has(pipe.key) ? "" : " trace-filter-off"),
-                text: pipe.label,
+                cls: "trace-filter-chip" + (active ? "" : " trace-filter-off"),
             });
             btn.style.setProperty("--pipe-color", pipe.color);
+            const dot = btn.createEl("span", { cls: "trace-chip-dot" });
+            dot.style.backgroundColor = pipe.color;
+            btn.createEl("span", { cls: "trace-chip-label", text: pipe.label });
+            btn.createEl("span", { cls: "trace-chip-count", text: String(n) });
             btn.addEventListener("click", () => {
-                if (this.activePipes.has(pipe.key)) {
-                    this.activePipes.delete(pipe.key);
-                } else {
-                    this.activePipes.add(pipe.key);
-                }
-                btn.classList.toggle("trace-filter-off", !this.activePipes.has(pipe.key));
-                this.renderEventList(container);
+                if (active) this.activePipes.delete(pipe.key);
+                else this.activePipes.add(pipe.key);
+                // Reconstruir solo el toolbar (más rápido que full render)
+                this.render();
             });
         }
 
-        this.renderEventList(container);
+        this.renderEventList(container, counts);
     }
 
-    private renderEventList(container: HTMLElement): void {
-        const old = container.querySelector(".trace-list");
+    private countByPipe(): Record<string, number> {
+        const counts: Record<string, number> = {};
+        for (const p of PIPES) counts[p.key] = 0;
+        for (const e of this.events) {
+            for (const p of PIPES) { if (p.match(e)) { counts[p.key]++; break; } }
+        }
+        return counts;
+    }
+
+    private renderEventList(container: HTMLElement, counts: Record<string, number>): void {
+        const old = container.querySelector(".trace-list-wrap");
         if (old) old.remove();
 
-        const list = container.createEl("div", { cls: "trace-list" });
+        const wrap = container.createEl("div", { cls: "trace-list-wrap" });
+        const list = wrap.createEl("div", { cls: "trace-list" });
 
         if (this.events.length === 0) {
-            const empty = list.createEl("div", { cls: "trace-empty" });
-            empty.createEl("span", { text: "Esperando eventos... Haz consultas al vault con Hermes para verlos aquí." });
+            list.createEl("div", { cls: "trace-empty", text: "Esperando eventos del agente..." });
             return;
         }
 
         const filtered = [...this.events].reverse().filter((e) => {
-            for (const pipe of PIPES) {
-                if (this.activePipes.has(pipe.key) && pipe.match(e)) return true;
-            }
+            for (const p of PIPES) { if (this.activePipes.has(p.key) && p.match(e)) return true; }
             return false;
         });
 
+        // Badge X/Y
+        const totalActive = Object.entries(counts)
+            .filter(([k]) => this.activePipes.has(k))
+            .reduce((s, [,c]) => s + c, 0);
+        const badge = wrap.createEl("div", { cls: "trace-filter-badge" });
+        badge.setText(`${Math.min(filtered.length, MAX_VISIBLE)}/${totalActive} eventos` +
+            (filtered.length > MAX_VISIBLE ? ` (últimos ${MAX_VISIBLE})` : ""));
+
         if (filtered.length === 0) {
-            const empty = list.createEl("div", { cls: "trace-empty" });
-            empty.createEl("span", { text: "Sin eventos para los filtros activos." });
+            list.createEl("div", { cls: "trace-empty", text: "Sin eventos para los filtros activos." });
             return;
         }
 
-        const visible = filtered.slice(0, MAX_VISIBLE);
-
-        for (const event of visible) {
+        for (const event of filtered.slice(0, MAX_VISIBLE)) {
             const row = list.createEl("div", { cls: "trace-event" });
 
+            const left = row.createEl("div", { cls: "trace-event-left" });
             const time = event.ts.slice(11, 19);
-            row.createEl("span", { cls: "trace-time", text: time });
+            left.createEl("span", { cls: "trace-time", text: time });
 
             const pipe = PIPES.find((p) => p.match(event));
             if (pipe) {
-                const badge = row.createEl("span", { cls: "trace-pipe-badge", text: pipe.label });
-                badge.style.setProperty("--pipe-color", pipe.color);
+                const dot = left.createEl("span", { cls: "trace-event-dot" });
+                dot.style.backgroundColor = pipe.color;
             }
 
-            const detail = row.createEl("span", { cls: "trace-detail" });
+            const body = row.createEl("div", { cls: "trace-event-body" });
             if (event.type === "command") {
-                detail.setText(`⚡ ${event.action || "?"}` +
-                    (event.nodes ? ` (${event.nodes.length} nodos)` : "") +
-                    (event.tag ? ` #${event.tag}` : ""));
+                body.createEl("span", { cls: "trace-event-text", text: `⚡ ${event.action || "?"}` });
+                const extra: string[] = [];
+                if (event.nodes?.length) extra.push(`${event.nodes.length} nodos`);
+                if (event.tag) extra.push(`#${event.tag}`);
+                if (extra.length) body.createEl("span", { cls: "trace-event-extra", text: extra.join(" · ") });
             } else {
                 const icon = TOOL_ICONS[event.tool || ""] || "•";
+                const slug = event.params?.slug || event.params?.query || "";
                 let text = `${icon} ${event.tool || "?"}`;
-                if (event.params?.slug) text += ` → ${event.params.slug}`;
-                else if (event.params?.query) text += ` "${event.params.query}"`;
-                if (event.result_nodes?.length) text += ` +${event.result_nodes.length} nodos`;
-                detail.setText(text);
-            }
-
-            if (event.duration_ms) {
-                row.createEl("span", { cls: "trace-ms", text: `${event.duration_ms}ms` });
+                if (slug) text += ` → ${slug}`;
+                body.createEl("span", { cls: "trace-event-text", text });
+                const extra: string[] = [];
+                if (event.result_nodes?.length) extra.push(`+${event.result_nodes.length} nodos`);
+                if (event.duration_ms) extra.push(`${event.duration_ms}ms`);
+                if (extra.length) body.createEl("span", { cls: "trace-event-extra", text: extra.join(" · ") });
             }
         }
     }
 
-    async onClose(): Promise<void> {
-        // No limpiar — el buffer es compartido
-    }
+    async onClose(): Promise<void> {}
 }

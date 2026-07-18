@@ -1,157 +1,200 @@
-/* Cognitive Trace — Panel Timeline */
+/* Cognitive Trace — Panel Timeline v3 */
 
 .cognitive-trace-timeline {
     display: flex;
     flex-direction: column;
     height: 100%;
-    font-size: 12px;
+    font-size: 11px;
     font-family: var(--font-monospace);
 }
+
+/* ── Header ── */
 
 .trace-header {
     display: flex;
     align-items: center;
-    gap: 8px;
+    justify-content: space-between;
     padding: 8px 12px;
     border-bottom: 1px solid var(--background-modifier-border);
 }
 
-.trace-header-title {
-    font-weight: 600;
-    font-size: 13px;
+.trace-header-left {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
 }
 
-.trace-header-count {
-    color: var(--text-muted);
-    font-size: 11px;
+.trace-header-title {
+    font-weight: 700;
+    font-size: 13px;
+    color: var(--text-normal);
 }
 
 .trace-clear-btn {
-    margin-left: auto;
-    padding: 2px 8px;
-    font-size: 11px;
-    background: var(--background-modifier-hover);
+    padding: 2px 10px;
+    font-size: 10px;
+    font-family: var(--font-monospace);
+    background: transparent;
     border: 1px solid var(--background-modifier-border);
     border-radius: 4px;
     cursor: pointer;
+    color: var(--text-faint);
+}
+.trace-clear-btn:hover { border-color: var(--text-muted); color: var(--text-muted); }
+
+/* ── Filter chips ── */
+
+.trace-filters {
+    display: flex;
+    gap: 5px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--background-modifier-border);
+    flex-wrap: wrap;
+}
+
+.trace-filter-chip {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    font-size: 10px;
+    font-family: var(--font-monospace);
+    border: 1px solid color-mix(in srgb, var(--pipe-color) 50%, transparent);
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--pipe-color) 10%, var(--background-primary));
+    color: var(--pipe-color);
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.trace-filter-chip:hover {
+    background: color-mix(in srgb, var(--pipe-color) 20%, var(--background-primary));
+    border-color: var(--pipe-color);
+}
+
+.trace-filter-chip.trace-filter-off {
+    background: var(--background-primary);
+    border-color: var(--background-modifier-border);
+    color: var(--text-faint);
+}
+.trace-filter-chip.trace-filter-off:hover {
+    border-color: var(--text-muted);
     color: var(--text-muted);
 }
 
-.trace-clear-btn:hover {
-    background: var(--background-modifier-active-hover);
-    color: var(--text-normal);
+.trace-chip-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+.trace-filter-chip.trace-filter-off .trace-chip-dot {
+    opacity: 0.25;
+}
+
+.trace-chip-label {
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.trace-chip-count {
+    color: var(--text-faint);
+    font-size: 9px;
+    background: var(--background-modifier-hover);
+    border-radius: 8px;
+    padding: 0 5px;
+    min-width: 16px;
+    text-align: center;
+}
+.trace-filter-chip.trace-filter-off .trace-chip-count {
+    display: none;
+}
+
+/* ── Badge X/Y ── */
+
+.trace-filter-badge {
+    padding: 3px 12px 0;
+    font-size: 9px;
+    color: var(--text-faint);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* ── Event list ── */
+
+.trace-list-wrap {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
 }
 
 .trace-list {
     flex: 1;
     overflow-y: auto;
-    padding: 4px 0;
+    padding: 2px 0;
 }
 
 .trace-event {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 6px;
-    padding: 3px 12px;
-    border-bottom: 1px solid var(--background-modifier-border-hover);
-    white-space: nowrap;
+    padding: 4px 12px;
+    border-bottom: 1px solid color-mix(in srgb, var(--background-modifier-border) 50%, transparent);
+    line-height: 1.4;
 }
 
 .trace-event:hover {
     background: var(--background-modifier-hover);
 }
 
-.trace-time {
-    color: var(--text-faint);
-    font-size: 10px;
-    min-width: 65px;
-}
-
-.trace-icon {
-    font-size: 12px;
-    min-width: 18px;
-    text-align: center;
-}
-
-.trace-tool {
-    color: var(--text-accent);
-    font-weight: 500;
-    min-width: 110px;
-}
-
-.trace-action {
-    color: var(--text-accent-hover);
-    font-weight: 600;
-}
-
-.trace-detail {
-    color: var(--text-normal);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 200px;
-}
-
-.trace-ms {
-    margin-left: auto;
-    color: var(--text-faint);
-    font-size: 10px;
-    min-width: 40px;
-    text-align: right;
-}
-
-/* Filter toolbar */
-
-.trace-filters {
+.trace-event-left {
     display: flex;
-    gap: 4px;
-    padding: 6px 12px;
-    border-bottom: 1px solid var(--background-modifier-border);
-    flex-wrap: wrap;
-}
-
-.trace-filter-btn {
-    padding: 2px 10px;
-    font-size: 11px;
-    font-family: var(--font-monospace);
-    border: 1px solid var(--pipe-color, var(--text-muted));
-    border-radius: 10px;
-    background: var(--background-primary);
-    color: var(--pipe-color, var(--text-muted));
-    cursor: pointer;
-    opacity: 0.9;
-    transition: opacity 0.15s;
-}
-
-.trace-filter-btn:hover {
-    opacity: 1;
-}
-
-.trace-filter-btn.trace-filter-off {
-    opacity: 0.3;
-    border-color: var(--background-modifier-border);
-    color: var(--text-faint);
-}
-
-/* Pipe badge en cada evento */
-
-.trace-pipe-badge {
-    display: inline-block;
-    font-size: 9px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    padding: 0 5px;
-    border-radius: 3px;
-    color: var(--pipe-color, var(--text-muted));
-    border: 1px solid var(--pipe-color, var(--text-muted));
-    min-width: 0;
+    align-items: center;
+    gap: 5px;
+    min-width: 68px;
     flex-shrink: 0;
 }
 
+.trace-time {
+    color: var(--text-faint);
+    font-size: 10px;
+    font-variant-numeric: tabular-nums;
+}
+
+.trace-event-dot {
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    opacity: 0.7;
+}
+
+.trace-event-body {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px;
+}
+
+.trace-event-text {
+    color: var(--text-normal);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.trace-event-extra {
+    color: var(--text-faint);
+    font-size: 9px;
+    white-space: nowrap;
+}
+
 .trace-empty {
-    padding: 16px;
+    padding: 20px 16px;
     color: var(--text-muted);
-    font-size: 12px;
+    font-size: 11px;
     text-align: center;
     font-family: var(--font-text);
 }
