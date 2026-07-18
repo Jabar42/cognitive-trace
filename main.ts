@@ -72,6 +72,16 @@ export default class CognitiveTracePlugin extends Plugin {
             }
         });
 
+        // Cargar historial completo desde JSONL (sin esperar nuevos eventos)
+        try {
+            const history = this.reader.readAll();
+            console.log(`[CognitiveTrace] Cargando ${history.length} eventos históricos...`);
+            this.animator?.loadHistory(history);
+            console.log("[CognitiveTrace] Historial cargado — grafo poblado.");
+        } catch (e) {
+            console.error("[CognitiveTrace] Error cargando historial:", e);
+        }
+
         this.reader.start();
         console.log("[CognitiveTrace] EventReader started (fs.watch + polling 500ms)");
 

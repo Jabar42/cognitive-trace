@@ -49,6 +49,30 @@ export class GraphAnimator {
         return isNaN(v) ? 0xffffff : v;
     }
 
+    /** Cargar estado desde el historial sin animaciones ni pulsos (para init). */
+    loadHistory(events: TraceEvent[]): void {
+        for (const e of events) {
+            if (e.type === "command") { this.executeCommand(e); continue; }
+            if ((e.tool === "okf_traverse" || e.tool === "okf_read") && e.params?.slug) {
+                const slug = e.params.slug;
+                const pipe: PipeKey = e.tool === "okf_read" ? "read" : "traverse";
+                this.visitedNodes.add(slug);
+                this.nodePipes.set(slug, pipe);
+                if (e.tool === "okf_read") this.readNodes.add(slug);
+                this.currentNode = slug;
+            }
+            if (Array.isArray(e.result_nodes)) {
+                const resPipe: PipeKey = (e.tool === "okf_traverse") ? "traverse" : "search";
+                for (const p of e.result_nodes) {
+                    this.visitedNodes.add(p);
+                    this.nodePipes.set(p, resPipe);
+                }
+            }
+        }
+        // Aplicar colores SIN cascada ni pulsos
+        this.patchAndRefresh();
+    }
+
     processEvents(events: TraceEvent[]): void {
         for (const e of events) {
             if (e.type === "command") { this.executeCommand(e); continue; }

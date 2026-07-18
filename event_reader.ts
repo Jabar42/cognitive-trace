@@ -41,6 +41,19 @@ export class EventReader {
         this.listeners.push(cb);
     }
 
+    /** Leer TODOS los eventos históricos del JSONL (para carga inicial). */
+    readAll(): TraceEvent[] {
+        if (!fs.existsSync(this.filePath)) return [];
+        const content = fs.readFileSync(this.filePath, "utf-8");
+        this.lastSize = fs.statSync(this.filePath).size;
+        const events: TraceEvent[] = [];
+        for (const line of content.split("\n")) {
+            if (!line.trim()) continue;
+            try { events.push(JSON.parse(line)); } catch { /* línea malformada */ }
+        }
+        return events;
+    }
+
     start(): void {
         // Intentar fs.watch
         try {
