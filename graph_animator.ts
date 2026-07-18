@@ -20,6 +20,9 @@ export class GraphAnimator {
     private pendingPulses = new Set<string>();
     private pulses: Array<{ node: any; gfx: any; renderer: any; start: number; rgb: number; dur: number; beacon: boolean }> = [];
     private pulseRaf: number | null = null;
+    // Revelado en cascada de result_nodes (orden BFS del traverse → onda por profundidad)
+    private revealQueue: string[] = [];
+    private revealTimer: number | null = null;
 
     constructor(app: App, settings: CTSettings) {
         this.app = app;
@@ -54,12 +57,39 @@ export class GraphAnimator {
             }
             // Subgrafo del resultado (traverse/search): se pintan como visitados
             // pero SIN pendingPulses — 60 pulsos simultáneos serían ruido visual.
+            // Con revealStagger > 0 se encolan y revelan uno por uno.
             if (Array.isArray(e.result_nodes)) {
-                for (const p of e.result_nodes) this.visitedNodes.add(p);
+                for (const p of e.result_nodes) {
+                    if (this.settings.revealStagger > 0) {
+                        if (!this.visitedNodes.has(p) && !this.revealQueue.includes(p)) {
+                            this.revealQueue.push(p);
+                        }
+                    } else {
+                        this.visitedNodes.add(p);
+                    }
+                }
             }
         }
         this.patchAndRefresh();
         this.pendingPulses.clear();
+        if (this.revealQueue.length) this.scheduleReveal();
+    }
+
+    // Revela el próximo nodo de la cola y re-agenda hasta vaciarla. setTimeout
+    // encadenado (no interval) para que cambios de revealStagger apliquen en vivo.
+    private scheduleReveal(): void {
+        if (this.revealTimer != null) return;
+        const step = () => {
+            this.revealTimer = null;
+            const path = this.revealQueue.shift();
+            if (path == null) return;
+            this.visitedNodes.add(path);
+            this.patchAndRefresh();
+            if (this.revealQueue.length) {
+                this.revealTimer = window.setTimeout(step, Math.max(16, this.settings.revealStagger));
+            }
+        };
+        this.revealTimer = window.setTimeout(step, Math.max(16, this.settings.revealStagger));
     }
 
     private executeCommand(cmd: TraceEvent): void {
@@ -83,6 +113,8 @@ export class GraphAnimator {
         this.commandHighlights.clear();
         this.highlightedPath = [];
         this.pendingPulses.clear();
+        this.revealQueue = [];
+        if (this.revealTimer != null) { window.clearTimeout(this.revealTimer); this.revealTimer = null; }
         this.clearPulses();
         this.patchAndRefresh();
     }

@@ -12,6 +12,7 @@ export interface CTSettings {
     pulseEnabled: boolean;  // onda expansiva al pintar
     pulseIndefinite: boolean; // el nodo actual pulsa en loop hasta que el agente avance
     pulseDuration: number;  // ms
+    revealStagger: number;  // ms entre nodos al revelar resultados (0 = todos a la vez)
 }
 
 export const DEFAULT_SETTINGS: CTSettings = {
@@ -24,6 +25,7 @@ export const DEFAULT_SETTINGS: CTSettings = {
     pulseEnabled: true,
     pulseIndefinite: false,
     pulseDuration: 900,
+    revealStagger: 80,
 };
 
 export class CTSettingTab extends PluginSettingTab {
@@ -106,6 +108,19 @@ export class CTSettingTab extends PluginSettingTab {
                 .setDynamicTooltip()
                 .onChange(async (v) => {
                     this.plugin.settings.pulseDuration = v;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl).setName("Revelado").setHeading();
+        new Setting(containerEl)
+            .setName("Cascada de resultados")
+            .setDesc("Milisegundos entre nodo y nodo al iluminar el resultado de un traverse/search. Los nodos llegan en orden de profundidad, así que la onda se expande desde el nodo de entrada. 0 = todos a la vez.")
+            .addSlider(s => s
+                .setLimits(0, 300, 20)
+                .setValue(this.plugin.settings.revealStagger)
+                .setDynamicTooltip()
+                .onChange(async (v) => {
+                    this.plugin.settings.revealStagger = v;
                     await this.plugin.saveSettings();
                 }));
     }
