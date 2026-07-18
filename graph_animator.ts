@@ -5,6 +5,9 @@ import { App } from "obsidian";
 import { TraceEvent } from "./event_reader";
 import { CTSettings } from "./settings";
 
+// Compartido con TimelineView para que los filtros controlen también el grafo
+export type PipeKey = "traverse" | "read" | "search" | "commands";
+
 export class GraphAnimator {
     private app: App;
     private settings: CTSettings;
@@ -12,6 +15,10 @@ export class GraphAnimator {
     private visitedNodes = new Set<string>();
     private readNodes = new Set<string>();  // body completo leído vía okf_read
     private currentNode: string | null = null;
+    // Pipe de origen por nodo → atenúa si el filtro del timeline está off
+    private nodePipes = new Map<string, PipeKey>();
+    // Referencia al Set del timeline; se asigna desde main.ts
+    activePipes: Set<string> | null = null;
     private commandHighlights = new Map<string, string>();
     private highlightedPath: string[] = [];
     // Pulsos: onda expansiva cuando un nodo se pinta por primera vez o pasa a current.
@@ -47,18 +54,19 @@ export class GraphAnimator {
             if (e.type === "command") { this.executeCommand(e); continue; }
             if ((e.tool === "okf_traverse" || e.tool === "okf_read") && e.params?.slug) {
                 const slug = e.params.slug;
+                const pipe: PipeKey = e.tool === "okf_read" ? "read" : "traverse";
                 if (!this.visitedNodes.has(slug) || this.currentNode !== slug) {
                     this.pendingPulses.add(slug);
                 }
                 this.visitedNodes.add(slug);
-                // okf_read = body completo inyectado al contexto → nivel epistémico propio
+                this.nodePipes.set(slug, pipe);
                 if (e.tool === "okf_read") this.readNodes.add(slug);
                 this.currentNode = slug;
             }
-            // Subgrafo del resultado (traverse/search): se pintan como visitados
-            // pero SIN pendingPulses — 60 pulsos simultáneos serían ruido visual.
-            // Con revealStagger > 0 se encolan y revelan uno por uno.
+            // Subgrafo del resultado: hereda el pipe de la tool que lo generó
+            // (okf_search result_nodes → pipe "search", okf_graph → "search", etc.)
             if (Array.isArray(e.result_nodes)) {
+                const resPipe: PipeKey = (e.tool === "okf_traverse") ? "traverse" : "search";
                 for (const p of e.result_nodes) {
                     if (this.settings.revealStagger > 0) {
                         if (!this.visitedNodes.has(p) && !this.revealQueue.includes(p)) {
@@ -67,6 +75,7 @@ export class GraphAnimator {
                     } else {
                         this.visitedNodes.add(p);
                     }
+                    this.nodePipes.set(p, resPipe);
                 }
             }
         }
@@ -98,14 +107,14 @@ export class GraphAnimator {
                 for (const n of cmd.nodes || []) {
                     if (!this.commandHighlights.has(n)) this.pendingPulses.add(n);
                     this.commandHighlights.set(n, cmd.color || this.settings.colorCommand);
+                    this.nodePipes.set(n, "commands");
                 }
                 break;
             case "highlight_session":
-                // El server ya resolvió los nodos de la sesión vía SQLite; si no
-                // envió ninguno, no hay nada que resaltar (sesión vacía).
                 for (const n of cmd.nodes || []) {
                     if (!this.commandHighlights.has(n)) this.pendingPulses.add(n);
                     this.commandHighlights.set(n, cmd.color || this.settings.colorCommand);
+                    this.nodePipes.set(n, "commands");
                 }
                 break;
             case "highlight_path": this.highlightedPath = cmd.nodes || []; break;
@@ -142,6 +151,7 @@ export class GraphAnimator {
     reset(): void {
         this.visitedNodes.clear();
         this.readNodes.clear();
+        this.nodePipes.clear();
         this.currentNode = null;
         this.commandHighlights.clear();
         this.focusTag = null;
@@ -208,11 +218,14 @@ export class GraphAnimator {
             if (targetColor == null && this.highlightedPath.includes(path)) targetColor = this.hex(this.settings.colorPath);
 
             if (targetColor != null) {
-                // Formato nativo de Obsidian: {a, rgb} — igual que renderer.colors.*
-                // La geometría y el tamaño NO se tocan: el renderer tintea el círculo base.
-                if (!node.color || node.color.rgb !== targetColor) {
-                    node.color = { a: 1, rgb: targetColor };
-                    if (this.settings.pulseEnabled) {
+                // Atenuar si el filtro del timeline correspondiente está apagado
+                const pipe = this.nodePipes.get(path);
+                const pipeActive = !pipe || !this.activePipes || this.activePipes.has(pipe);
+                const alpha = pipeActive ? 1 : 0.08;
+                const newColor = { a: alpha, rgb: targetColor };
+                if (!node.color || node.color.rgb !== targetColor || node.color.a !== alpha) {
+                    node.color = newColor;
+                    if (pipeActive && this.settings.pulseEnabled) {
                         for (const key of this.pendingPulses) {
                             if (path.includes(key)) { this.spawnPulse(r, node, targetColor); break; }
                         }

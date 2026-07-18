@@ -31,11 +31,13 @@ const MAX_VISIBLE = 200;
 
 export class TimelineView extends ItemView {
     private events: TraceEvent[];
-    private activePipes = new Set<string>(PIPES.map((p) => p.key));
+    activePipes = new Set<string>(PIPES.map((p) => p.key));
+    private onFilterChange: (() => void) | null = null;
 
-    constructor(leaf: WorkspaceLeaf, events: TraceEvent[]) {
+    constructor(leaf: WorkspaceLeaf, events: TraceEvent[], onFilterChange?: () => void) {
         super(leaf);
         this.events = events;
+        this.onFilterChange = onFilterChange || null;
     }
 
     getViewType(): string { return TIMELINE_VIEW_TYPE; }
@@ -75,11 +77,11 @@ export class TimelineView extends ItemView {
             btn.createEl("span", { cls: "trace-chip-label", text: pipe.label });
             btn.createEl("span", { cls: "trace-chip-count", text: String(n) });
             btn.addEventListener("click", () => {
-                // Leer el estado actual del Set, no la variable capturada en el closure
                 if (this.activePipes.has(pipe.key)) this.activePipes.delete(pipe.key);
                 else this.activePipes.add(pipe.key);
                 btn.classList.toggle("trace-filter-off", !this.activePipes.has(pipe.key));
                 this.renderEventList(container, this.countByPipe());
+                if (this.onFilterChange) this.onFilterChange();
             });
         }
 
