@@ -10,6 +10,7 @@ export class GraphAnimator {
     private settings: CTSettings;
     private enabled = true;
     private visitedNodes = new Set<string>();
+    private readNodes = new Set<string>();  // body completo leído vía okf_read
     private currentNode: string | null = null;
     private commandHighlights = new Map<string, string>();
     private highlightedPath: string[] = [];
@@ -47,6 +48,8 @@ export class GraphAnimator {
                     this.pendingPulses.add(slug);
                 }
                 this.visitedNodes.add(slug);
+                // okf_read = body completo inyectado al contexto → nivel epistémico propio
+                if (e.tool === "okf_read") this.readNodes.add(slug);
                 this.currentNode = slug;
             }
             // Subgrafo del resultado (traverse/search): se pintan como visitados
@@ -75,6 +78,7 @@ export class GraphAnimator {
 
     reset(): void {
         this.visitedNodes.clear();
+        this.readNodes.clear();
         this.currentNode = null;
         this.commandHighlights.clear();
         this.highlightedPath = [];
@@ -121,6 +125,12 @@ export class GraphAnimator {
                 if (path.includes(cn)) { targetColor = parseInt(cc.replace("#",""), 16); break; }
             }
             if (targetColor == null && this.currentNode && path.includes(this.currentNode)) targetColor = this.hex(this.settings.colorCurrent);
+            if (targetColor == null) {
+                // Leídos (body en contexto) tienen prioridad sobre vistos (solo ficha)
+                let isRead = false;
+                for (const rn of this.readNodes) { if (path.includes(rn)) { isRead = true; break; } }
+                if (isRead) targetColor = this.hex(this.settings.colorRead);
+            }
             if (targetColor == null) {
                 let visited = false;
                 for (const vn of this.visitedNodes) { if (path.includes(vn)) { visited = true; break; } }
