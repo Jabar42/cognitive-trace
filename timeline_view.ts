@@ -77,8 +77,11 @@ export class TimelineView extends ItemView {
             btn.addEventListener("click", () => {
                 if (active) this.activePipes.delete(pipe.key);
                 else this.activePipes.add(pipe.key);
-                // Reconstruir solo el toolbar (más rápido que full render)
-                this.render();
+                // Solo re-renderizar la lista, sin destruir el toolbar
+                const newActive = this.activePipes.has(pipe.key);
+                btn.classList.toggle("trace-filter-off", !newActive);
+                const c = this.countByPipe();
+                this.renderEventList(container, c);
             });
         }
 
