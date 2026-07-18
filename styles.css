@@ -1,0 +1,108 @@
+/* Cognitive Trace — Panel Timeline */
+
+.cognitive-trace-timeline {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    font-size: 12px;
+    font-family: var(--font-monospace);
+}
+
+.trace-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.trace-header-title {
+    font-weight: 600;
+    font-size: 13px;
+}
+
+.trace-header-count {
+    color: var(--text-muted);
+    font-size: 11px;
+}
+
+.trace-clear-btn {
+    margin-left: auto;
+    padding: 2px 8px;
+    font-size: 11px;
+    background: var(--background-modifier-hover);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+    cursor: pointer;
+    color: var(--text-muted);
+}
+
+.trace-clear-btn:hover {
+    background: var(--background-modifier-active-hover);
+    color: var(--text-normal);
+}
+
+.trace-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 4px 0;
+}
+
+.trace-event {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 12px;
+    border-bottom: 1px solid var(--background-modifier-border-hover);
+    white-space: nowrap;
+}
+
+.trace-event:hover {
+    background: var(--background-modifier-hover);
+}
+
+.trace-time {
+    color: var(--text-faint);
+    font-size: 10px;
+    min-width: 65px;
+}
+
+.trace-icon {
+    font-size: 12px;
+    min-width: 18px;
+    text-align: center;
+}
+
+.trace-tool {
+    color: var(--text-accent);
+    font-weight: 500;
+    min-width: 110px;
+}
+
+.trace-action {
+    color: var(--text-accent-hover);
+    font-weight: 600;
+}
+
+.trace-detail {
+    color: var(--text-normal);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 200px;
+}
+
+.trace-ms {
+    margin-left: auto;
+    color: var(--text-faint);
+    font-size: 10px;
+    min-width: 40px;
+    text-align: right;
+}
+
+.trace-empty {
+    padding: 16px;
+    color: var(--text-muted);
+    font-size: 12px;
+    text-align: center;
+    font-family: var(--font-text);
+}

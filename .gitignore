@@ -1,0 +1,17 @@
+# Dependencias
+node_modules/
+
+# Build — regenerable con npm run build
+main.js
+*.map
+
+# Datos de runtime del trace (eventos del agente, no es código)
+event_log.jsonl
+*.db
+*.db-journal
+
+# Config de usuario del plugin en Obsidian
+data.json
+
+# Sistema
+.DS_Store

@@ -1,0 +1,10 @@
+{
+  "id": "cognitive-trace",
+  "name": "Cognitive Trace",
+  "version": "0.1.0",
+  "minAppVersion": "1.5.0",
+  "description": "Anima el grafo nativo de Obsidian en tiempo real mientras Hermes Agent navega el vault OKF. Nodos se iluminan, conexiones se trazan, paso a paso.",
+  "author": "Tp3studio",
+  "authorUrl": "https://tp3studio.com",
+  "isDesktopOnly": true
+}

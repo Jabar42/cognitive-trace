@@ -1,0 +1,16 @@
+{
+  "name": "cognitive-trace",
+  "version": "0.1.0",
+  "description": "Anima el grafo nativo de Obsidian en tiempo real mientras Hermes Agent navega el vault OKF",
+  "main": "main.js",
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "esbuild": "^0.20.0",
+    "obsidian": "latest",
+    "typescript": "^5.0.0"
+  }
+}

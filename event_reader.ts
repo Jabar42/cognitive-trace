@@ -1,0 +1,92 @@
+// event_reader.ts — Lee event_log.jsonl con fs.watch + polling fallback
+import * as fs from "fs";
+import * as path from "path";
+
+export interface TraceEvent {
+    type: "tool" | "command";
+    session: string;
+    ts: string;
+    tool?: string;
+    params?: Record<string, any>;
+    exit_code?: number;
+    duration_ms?: number;
+    // command fields
+    action?: string;
+    nodes?: string[];
+    tag?: string;
+    color?: string;
+    session_id?: string;
+}
+
+export type EventCallback = (events: TraceEvent[]) => void;
+
+export class EventReader {
+    private filePath: string;
+    private lastSize = 0;
+    private watcher: fs.FSWatcher | null = null;
+    private listeners: EventCallback[] = [];
+    private pollInterval: ReturnType<typeof setInterval> | null = null;
+
+    constructor(vaultPath: string) {
+        this.filePath = path.join(
+            vaultPath, ".obsidian", "plugins", "cognitive-trace", "event_log.jsonl"
+        );
+        if (fs.existsSync(this.filePath)) {
+            this.lastSize = fs.statSync(this.filePath).size;
+        }
+    }
+
+    onEvents(cb: EventCallback): void {
+        this.listeners.push(cb);
+    }
+
+    start(): void {
+        // Intentar fs.watch
+        try {
+            this.watcher = fs.watch(this.filePath, (eventType) => {
+                if (eventType === "change") {
+                    this.poll();
+                }
+            });
+        } catch {
+            // fs.watch no disponible — solo polling
+        }
+
+        // Polling fallback cada 500ms
+        this.pollInterval = setInterval(() => this.poll(), 500);
+    }
+
+    stop(): void {
+        if (this.watcher) { this.watcher.close(); this.watcher = null; }
+        if (this.pollInterval) { clearInterval(this.pollInterval); this.pollInterval = null; }
+    }
+
+    private poll(): void {
+        if (!fs.existsSync(this.filePath)) return;
+
+        const currentSize = fs.statSync(this.filePath).size;
+        if (currentSize <= this.lastSize) return;
+
+        const fd = fs.openSync(this.filePath, "r");
+        const buf = Buffer.alloc(currentSize - this.lastSize);
+        fs.readSync(fd, buf, 0, buf.length, this.lastSize);
+        fs.closeSync(fd);
+        this.lastSize = currentSize;
+
+        const newContent = buf.toString("utf-8");
+        const lines = newContent.trim().split("\n").filter(Boolean);
+        const events: TraceEvent[] = [];
+
+        for (const line of lines) {
+            try {
+                events.push(JSON.parse(line));
+            } catch {
+                // línea malformada, ignorar
+            }
+        }
+
+        if (events.length > 0) {
+            for (const cb of this.listeners) cb(events);
+        }
+    }
+}
