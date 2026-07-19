@@ -58,6 +58,16 @@ class FakeGraphics {
     lineStyle = vi.fn();
 }
 
+class FakeLink {
+    line = { width: 10, tint: 0 };
+    arrow = { tint: 0, alpha: 1 };
+    px = { zIndex: 0 };
+    renderer = { changed: vi.fn(), hanger: { sortChildren: vi.fn() } };
+    $ctColor = 0xff00ff;
+
+    render(): void { this.line.width = 10; }
+}
+
 function makeRenderer(paths: string[]) {
     const nodes = paths.map((id) => ({
         id,
@@ -216,5 +226,47 @@ describe("GraphAnimator replay audio sync", () => {
 
         expect(renderer.nodes[0].color).toBeNull();
         expect(renderer.nodes[1].color).not.toBeNull();
+    });
+
+    it("reintenta la aparición de okf_new si el índice del grafo llega tarde", () => {
+        const renderer = makeRenderer(["insights/delayed.md"]);
+        const delayedNode = renderer.nodes[0];
+        renderer.nodes = [];
+        const app = { workspace: { on: vi.fn(), getLeavesOfType: vi.fn(() => [{ view: { renderer } }]) } } as any;
+        const animator = new GraphAnimator(app, { ...DEFAULT_SETTINGS, revealStagger: 0 });
+        const audio = new FakeAudioContext();
+        audio.state = "running";
+        (animator as any).audioCtx = audio;
+
+        animator.processEvents([{
+            type: "tool", session: "live", ts: "2026-07-19T04:00:00.000Z",
+            tool: "okf_new", params: { created_path: "insights/delayed.md" }, exit_code: 0,
+        }]);
+        expect(audio.oscillators).toHaveLength(0);
+
+        renderer.nodes = [delayedNode];
+        animator.refresh();
+
+        expect(audio.oscillators).toHaveLength(2);
+        expect((animator as any).pulses).toHaveLength(1);
+        expect(delayedNode.color).not.toBeNull();
+    });
+
+    it("no apaga la línea en el frame previo al inicio de la animación", () => {
+        const link = new FakeLink();
+        const renderer = { links: [link] };
+        const app = { workspace: { on: vi.fn(), getLeavesOfType: vi.fn(() => []) } } as any;
+        const animator = new GraphAnimator(app, { ...DEFAULT_SETTINGS });
+        (animator as any).patchLinkRender(renderer);
+        link.$ctAnimStart = 1016;
+        link.$ctAnimBaseWidth = 10;
+
+        link.render();
+        expect(link.line.width).toBe(10);
+
+        vi.mocked(performance.now).mockReturnValue(1250);
+        link.$ctAnimStart = 1000;
+        link.render();
+        expect(link.line.width).toBe(7.5);
     });
 });

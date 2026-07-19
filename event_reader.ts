@@ -24,6 +24,7 @@ export type EventCallback = (events: TraceEvent[]) => void;
 export class EventReader {
     private filePath: string;
     private lastSize = 0;
+    private partialLine = "";
     private watcher: fs.FSWatcher | null = null;
     private listeners: EventCallback[] = [];
     private pollInterval: ReturnType<typeof setInterval> | null = null;
@@ -79,19 +80,27 @@ export class EventReader {
         if (!fs.existsSync(this.filePath)) return;
 
         const currentSize = fs.statSync(this.filePath).size;
-        if (currentSize <= this.lastSize) return;
+        // Una rotación/truncamiento invalida el offset anterior.
+        if (currentSize < this.lastSize) {
+            this.lastSize = 0;
+            this.partialLine = "";
+        }
+        if (currentSize === this.lastSize && !this.partialLine) return;
 
         const fd = fs.openSync(this.filePath, "r");
         const buf = Buffer.alloc(currentSize - this.lastSize);
-        fs.readSync(fd, buf, 0, buf.length, this.lastSize);
+        if (buf.length > 0) fs.readSync(fd, buf, 0, buf.length, this.lastSize);
         fs.closeSync(fd);
         this.lastSize = currentSize;
 
-        const newContent = buf.toString("utf-8");
-        const lines = newContent.trim().split("\n").filter(Boolean);
+        const content = this.partialLine + buf.toString("utf-8");
+        const hasFinalNewline = content.endsWith("\n");
+        const lines = content.split("\n");
+        this.partialLine = hasFinalNewline ? "" : (lines.pop() || "");
         const events: TraceEvent[] = [];
 
         for (const line of lines) {
+            if (!line.trim()) continue;
             try {
                 events.push(JSON.parse(line));
             } catch {

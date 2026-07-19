@@ -26,6 +26,9 @@ export class GraphAnimator {
     // Se marcan por cambio de estado lógico (no por transición de color) para que los
     // rebuilds de setData — que recrean nodos con color null — no re-disparen pulsos.
     private pendingPulses = new Set<string>();
+    // Se conserva hasta que el renderer tenga el nodo (la indexación de un
+    // archivo nuevo puede llegar después del evento okf_new).
+    private pendingAppearances = new Set<string>();
     private pulses: Array<{ node: any; gfx: any; renderer: any; start: number; rgb: number; dur: number; beacon: boolean }> = [];
     private pulseRaf: number | null = null;
     // Revelado en cascada de result_nodes (orden BFS del traverse → onda por profundidad)
@@ -71,6 +74,7 @@ export class GraphAnimator {
                 this.createdNodes.add(path);
                 this.visitedNodes.add(path);
                 this.nodePipes.set(path, "create");
+                this.pendingAppearances.add(path);
                 continue;
             }
             if ((e.tool === "okf_traverse" || e.tool === "okf_read") && e.params?.slug) {
@@ -166,6 +170,7 @@ export class GraphAnimator {
         this.highlightedPath = [];
         this.nodePipes.clear();
         this.pendingPulses.clear();
+        this.pendingAppearances.clear();
         this.revealQueue = [];
         this.queuedCommands.clear();
         this.focusTag = null;
@@ -243,6 +248,7 @@ export class GraphAnimator {
                 this.createdNodes.add(path);
                 this.visitedNodes.add(path);
                 this.nodePipes.set(path, "create");
+                this.pendingAppearances.add(path);
                 this.pendingPulses.add(path);
                 continue;
             }
@@ -374,6 +380,7 @@ export class GraphAnimator {
         this.focusTag = null;
         this.highlightedPath = [];
         this.pendingPulses.clear();
+        this.pendingAppearances.clear();
         this.revealQueue = [];
         this.queuedCommands.clear();
         if (this.revealTimer != null) { window.clearTimeout(this.revealTimer); this.revealTimer = null; }
@@ -448,6 +455,7 @@ export class GraphAnimator {
                     if (this.nodeMatches(path, cn)) {
                         targetColor = this.hex(this.settings.colorCreate);
                         this.nodePipes.set(path, "create");
+                        if (this.pendingAppearances.has(cn)) this.pendingPulses.add(cn);
                         break;
                     }
                 }
@@ -495,6 +503,9 @@ export class GraphAnimator {
                             if (this.settings.pulseEnabled) {
                                 this.spawnPulse(r, node, targetColor, false, startAt);
                             }
+                            for (const appearance of this.pendingAppearances) {
+                                if (this.nodeMatches(path, appearance)) this.pendingAppearances.delete(appearance);
+                            }
                             break;
                         }
                     }
@@ -537,7 +548,7 @@ export class GraphAnimator {
     // prototipo de la clase link para escribir DESPUÉS del render nativo — nuestro tint
     // gana cada frame sin pelear con el lerp ni tocar geometría. El wrapper es stateless
     // (solo lee link.$ctColor), por lo que sobrevive rebuilds y hot-reloads sin zombies.
-    private static readonly LINK_PATCH_V = 2;
+    private static readonly LINK_PATCH_V = 3;
 
     private patchLinkRender(r: any): void {
         const sample = r.links?.[0];
@@ -561,9 +572,16 @@ export class GraphAnimator {
                     const dur = this.$ctAnimDur || 500;
                     const t = Math.max(0, Math.min(1, elapsed / dur));
                     const ease = 1 - (1 - t) * (1 - t); // ease-out
-                    this.line.width *= ease;
+                    const baseWidth = this.$ctAnimBaseWidth ?? this.line.width;
+                    // Antes del instante de inicio el render nativo conserva la
+                    // línea completa; nunca multiplicar el ancho acumulado.
+                    if (elapsed >= 0) this.line.width = baseWidth * ease;
                     if (this.arrow) this.arrow.alpha = t;
-                    if (t >= 1) this.$ctAnimStart = null;
+                    if (t >= 1) {
+                        this.line.width = baseWidth;
+                        this.$ctAnimStart = null;
+                        this.$ctAnimBaseWidth = null;
+                    }
                     // Mantener el render loop despierto durante la animación
                     try { this.renderer.changed?.(); } catch (_) {}
                 }
@@ -579,7 +597,11 @@ export class GraphAnimator {
     private applyLinkColors(r: any): void {
         if (!r?.links) return;
         if (!this.settings.edgeColoring) {
-            for (const link of r.links) { if (link.$ctColor != null) link.$ctColor = null; }
+            for (const link of r.links) {
+                if (link.$ctColor != null) link.$ctColor = null;
+                link.$ctAnimStart = null;
+                link.$ctAnimBaseWidth = null;
+            }
             return;
         }
         this.patchLinkRender(r);
@@ -595,7 +617,9 @@ export class GraphAnimator {
                 const bothActive = (!sp || !this.activePipes || this.activePipes.has(sp)) &&
                                    (!tp || !this.activePipes || this.activePipes.has(tp));
                 if (!bothActive) {
-                    if (link.$ctColor != null) { link.$ctColor = null; link.$ctAnimStart = null; }
+                    if (link.$ctColor != null) link.$ctColor = null;
+                    link.$ctAnimStart = null;
+                    link.$ctAnimBaseWidth = null;
                     continue;
                 }
                 // Color de current si toca ese nodo; hereda el color si ambos endpoints
@@ -604,14 +628,14 @@ export class GraphAnimator {
                                (sc.rgb === tc.rgb) ? sc.rgb : neutral;
                 if (link.$ctColor !== target) {
                     link.$ctColor = target;
-                    // +16ms: el render nativo ya dibujó este frame con el tint nuevo
-                    // a ancho completo. Adelantar el start evita el flash inicial.
-                    link.$ctAnimStart = performance.now() + 16;
+                    link.$ctAnimBaseWidth = typeof link.line?.width === "number" ? link.line.width : null;
+                    link.$ctAnimStart = performance.now();
                     link.$ctAnimDur = 500;
                 }
             } else if (link.$ctColor != null) {
                 link.$ctColor = null;
                 link.$ctAnimStart = null;
+                link.$ctAnimBaseWidth = null;
             }
         }
     }
