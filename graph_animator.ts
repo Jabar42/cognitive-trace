@@ -179,14 +179,19 @@ export class GraphAnimator {
             if (Array.isArray(e.result_nodes)) {
                 const resPipe: PipeKey = (e.tool === "okf_traverse") ? "traverse" : "search";
                 for (const p of e.result_nodes) {
+                    const isNew = !this.visitedNodes.has(p);
                     if (this.settings.revealStagger > 0) {
-                        if (!this.visitedNodes.has(p) && !this.revealQueue.includes(p)) {
+                        if (isNew && !this.revealQueue.includes(p)) {
                             this.revealQueue.push(p);
                         }
                     } else {
                         this.visitedNodes.add(p);
+                        // Beep por cada nodo agregado directamente (sin cascada) durante replay
+                        if (isNew && this.replayActive) {
+                            const rp = (this.nodePipes.get(p) || resPipe) as PipeKey;
+                            this.beep(rp);
+                        }
                     }
-                    // Respetar jerarquía de pipes: read > traverse > search
                     const existing = this.nodePipes.get(p);
                     if (existing !== "read") this.nodePipes.set(p, resPipe);
                 }
@@ -207,6 +212,11 @@ export class GraphAnimator {
             if (path == null) return;
             this.visitedNodes.add(path);
             this.patchAndRefresh();
+            // Beep por cada nodo revelado en cascada durante replay
+            if (this.replayActive) {
+                const p = (this.nodePipes.get(path) || "traverse") as PipeKey;
+                this.beep(p);
+            }
             if (this.revealQueue.length) {
                 this.revealTimer = window.setTimeout(step, Math.max(16, this.settings.revealStagger));
             }
