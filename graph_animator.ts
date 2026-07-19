@@ -318,11 +318,12 @@ export class GraphAnimator {
         this.focusTag = null; // one-shot
     }
 
-    /** Limpiar traza sin tocar activePipes (filtros del timeline). */
+    /** Limpiar traza sin tocar activePipes ni nodePipes (filtros + tipo).
+     *  nodePipes se preserva: los paths viejos son inofensivos (no matchean
+     *  sin visitedNodes/readNodes) y los nuevos se pisan en processEvents. */
     private clearTraceState(): void {
         this.visitedNodes.clear();
         this.readNodes.clear();
-        this.nodePipes.clear();
         this.currentNode = null;
         this.commandHighlights.clear();
         this.focusTag = null;
