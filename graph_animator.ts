@@ -25,7 +25,7 @@ export class GraphAnimator {
     // Se marcan por cambio de estado lógico (no por transición de color) para que los
     // rebuilds de setData — que recrean nodos con color null — no re-disparen pulsos.
     private pendingPulses = new Set<string>();
-    private pulses: Array<{ node: any; gfx: any; renderer: any; start: number; rgb: number; dur: number; beacon: boolean; beeped: boolean }> = [];
+    private pulses: Array<{ node: any; gfx: any; renderer: any; start: number; rgb: number; dur: number; beacon: boolean }> = [];
     private pulseRaf: number | null = null;
     // Revelado en cascada de result_nodes (orden BFS del traverse → onda por profundidad)
     private revealQueue: string[] = [];
@@ -81,19 +81,13 @@ export class GraphAnimator {
     private replayActive = false;
 
     /** Ping sincronizado con la onda expansiva del pulso. */
-    private beep(pipe: PipeKey, delayMs: number = 50): void {
-        if (!this.settings.replayBeeps || !this.replayActive) return;
+    private beep(pipe: PipeKey): void {
         try {
-            if (!this.audioCtx) this.audioCtx = new AudioContext();
             const ctx = this.audioCtx;
-            // Reactivar si el navegador lo suspendió. No retornamos: los
-            // osciladores se schedulean con ctx.currentTime (pausado durante
-            // suspensión) y sonarán cuando el contexto se reanude.
-            if (ctx.state === "suspended") ctx.resume();
-            if (ctx.state === "closed") { this.audioCtx = new AudioContext(); return; }
+	        if (!ctx || ctx.state !== "running") return;
 
-            const now = ctx.currentTime + delayMs / 1000;
-            const dur = 0.28;
+            const now = ctx.currentTime;
+            const dur = 0.25;
             const freq: Record<PipeKey, number> = {
                 traverse: 1047, read: 784, search: 587, commands: 440,
             };
@@ -112,13 +106,9 @@ export class GraphAnimator {
             osc2.frequency.setValueAtTime(baseFreq * 2, now);
             osc2.frequency.exponentialRampToValueAtTime(baseFreq * 2.2, now + dur * 0.1);
 
-            gain1.gain.setValueAtTime(0.001, now);
-            gain1.gain.exponentialRampToValueAtTime(0.07, now + 0.008);
-            gain1.gain.setValueAtTime(0.07, now + 0.04);
-            gain1.gain.exponentialRampToValueAtTime(0.001, now + dur);
+            gain1.gain.setValueAtTime(0.07, now);
+	            gain1.gain.exponentialRampToValueAtTime(0.001, now + dur);
 
-            gain2.gain.setValueAtTime(0.001, now);
-            gain2.gain.exponentialRampToValueAtTime(0.025, now + 0.006);
             gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
 
             osc1.connect(gain1).connect(ctx.destination);
@@ -128,7 +118,6 @@ export class GraphAnimator {
             osc2.start(now); osc2.stop(now + dur * 0.5 + 0.05);
 
             // Limpiar nodos después de que terminen (evita acumulación)
-            const cleanup = now + dur + 0.1;
             osc1.onended = () => { try { osc1.disconnect(); gain1.disconnect(); } catch (_) {} };
             osc2.onended = () => { try { osc2.disconnect(); gain2.disconnect(); } catch (_) {} };
         } catch (_) { /* audio no disponible */ }
@@ -153,6 +142,13 @@ export class GraphAnimator {
         if (this.revealTimer != null) { window.clearTimeout(this.revealTimer); this.revealTimer = null; }
         this.currentNode = null;
         this.patchAndRefresh();
+        // Inicializar AudioContext con user gesture (click ▶) — garantiza running
+        if (this.settings.replayBeeps) {
+            try {
+                if (!this.audioCtx) this.audioCtx = new AudioContext();
+                if (this.audioCtx.state === "suspended") this.audioCtx.resume();
+            } catch (_) {}
+        }
         this.replayActive = true;
 
         if (!events.length) { this.replayActive = false; return; }
@@ -547,13 +543,19 @@ export class GraphAnimator {
     private spawnPulse(r: any, node: any, rgb: number, beacon = false): void {
         try {
             if (!r?.hanger) return;
+            // Sonido inmediato: sin delay, sin scheduling. El AudioContext se
+            // inicializa en replayPrompt() con el user gesture del click ▶.
+            if (this.replayActive && !beacon && this.settings.replayBeeps) {
+                const pipe = (this.nodePipes.get(node.id || "") || "traverse") as PipeKey;
+                this.beep(pipe);
+            }
             const GraphicsCtor = node.circle?.constructor || r.links?.[0]?.arrow?.constructor;
             if (!GraphicsCtor) return;
             const gfx: any = new GraphicsCtor();
             gfx.eventMode = "none";
             gfx.zIndex = 1.5; // sobre nodos (1), bajo labels (2) si algo re-sortea
             r.hanger.addChild(gfx);
-            this.pulses.push({ node, gfx, renderer: r, start: performance.now(), rgb, dur: this.settings.pulseDuration || 900, beacon, beeped: false });
+            this.pulses.push({ node, gfx, renderer: r, start: performance.now(), rgb, dur: this.settings.pulseDuration || 900, beacon });
             if (this.pulseRaf == null) this.tickPulses();
         } catch (_) { /* sin Graphics accesible, sin pulso */ }
     }
@@ -571,14 +573,8 @@ export class GraphAnimator {
                     }
                     if (t >= 1) {
                         if (!p.beacon) { this.killPulse(i); continue; }
-                        if (t >= 1.35) { p.start = now; t = 0; p.beeped = false; }
+                        if (t >= 1.35) { p.start = now; t = 0; }
                         else { p.gfx.clear(); continue; }
-                    }
-                    // Beep en el primer frame visible del pulso (sincronizado con el dibujo)
-                    if (this.replayActive && !p.beacon && !p.beeped && t > 0.01) {
-                        p.beeped = true;
-                        const pipe = (this.nodePipes.get(p.node.id || "") || "traverse") as PipeKey;
-                        this.beep(pipe);
                     }
                     const worldR = p.node.getSize() * p.renderer.nodeScale;
                     const scale = p.renderer.scale || 1;
