@@ -400,10 +400,19 @@ export class GraphAnimator {
             if (c != null && this.line) {
                 this.line.tint = c;
                 if (this.arrow) this.arrow.tint = c;
+                // Animación progresiva: la línea crece desde source hacia target
+                if (this.$ctAnimStart) {
+                    const elapsed = performance.now() - this.$ctAnimStart;
+                    const dur = this.$ctAnimDur || 500;
+                    const t = Math.min(1, elapsed / dur);
+                    const ease = 1 - (1 - t) * (1 - t); // ease-out
+                    this.line.width *= ease;
+                    if (this.arrow) this.arrow.alpha = t;
+                    if (t >= 1) this.$ctAnimStart = null;
+                    // Mantener el render loop despierto durante la animación
+                    try { this.renderer.changed?.(); } catch (_) {}
+                }
             }
-            // Capa intermedia: encima de las líneas de tema (zIndex 0), debajo de
-            // nodos/flechas (zIndex 1). El hanger tiene sortableChildren apagado,
-            // así que el re-sort se dispara manualmente y solo en transiciones.
             const z = c != null ? 0.5 : 0;
             if (this.px && this.px.zIndex !== z) {
                 this.px.zIndex = z;
@@ -431,16 +440,22 @@ export class GraphAnimator {
                 const bothActive = (!sp || !this.activePipes || this.activePipes.has(sp)) &&
                                    (!tp || !this.activePipes || this.activePipes.has(tp));
                 if (!bothActive) {
-                    if (link.$ctColor != null) link.$ctColor = null;
+                    if (link.$ctColor != null) { link.$ctColor = null; link.$ctAnimStart = null; }
                     continue;
                 }
                 // Color de current si toca ese nodo; hereda el color si ambos endpoints
                 // coinciden (visitados, path, highlights); neutro (visitados) si son mixtos.
-                if (sc.rgb === gold || tc.rgb === gold) link.$ctColor = gold;
-                else if (sc.rgb === tc.rgb) link.$ctColor = sc.rgb;
-                else link.$ctColor = neutral;
+                const target = (sc.rgb === gold || tc.rgb === gold) ? gold :
+                               (sc.rgb === tc.rgb) ? sc.rgb : neutral;
+                if (link.$ctColor !== target) {
+                    link.$ctColor = target;
+                    // Disparar animación de crecimiento si es la primera vez
+                    link.$ctAnimStart = performance.now();
+                    link.$ctAnimDur = 500;
+                }
             } else if (link.$ctColor != null) {
                 link.$ctColor = null;
+                link.$ctAnimStart = null;
             }
         }
     }
