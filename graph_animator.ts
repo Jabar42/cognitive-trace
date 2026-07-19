@@ -80,27 +80,53 @@ export class GraphAnimator {
     private audioCtx: AudioContext | null = null;
     private replayActive = false;
 
-    /** Beep sutil al aparecer un nodo durante replay. Frecuencia según tipo. */
+    /** Ping dramático sincronizado con la onda expansiva del pulso.
+     *  Sweep de frecuencia descendente + armónico de octava.
+     *  El tono baja mientras el anillo se expande — como si el sonido
+     *  "empujara" la onda hacia afuera. */
     private beep(pipe: PipeKey): void {
         if (!this.settings.replayBeeps || !this.replayActive) return;
         try {
             if (!this.audioCtx) this.audioCtx = new AudioContext();
             const ctx = this.audioCtx;
             if (ctx.state === "suspended") ctx.resume();
-            const osc = ctx.createOscillator();
-            const gain = ctx.createGain();
-            osc.connect(gain);
-            gain.connect(ctx.destination);
-            const freq: Record<PipeKey, number> = {
-                traverse: 880, read: 660, search: 520, commands: 440,
-            };
-            osc.frequency.value = freq[pipe] || 660;
-            osc.type = "sine";
             const now = ctx.currentTime;
-            gain.gain.setValueAtTime(0.06, now);
-            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
-            osc.start(now);
-            osc.stop(now + 0.1);
+            const dur = 0.28; // ms totales
+
+            const freq: Record<PipeKey, number> = {
+                traverse: 1047, read: 784, search: 587, commands: 440,
+            };
+            const baseFreq = freq[pipe] || 660;
+
+            // Oscilador principal con sweep descendente (empuja la onda)
+            const osc1 = ctx.createOscillator();
+            osc1.type = "triangle";
+            osc1.frequency.setValueAtTime(baseFreq * 1.4, now);
+            osc1.frequency.exponentialRampToValueAtTime(baseFreq, now + dur * 0.6);
+
+            // Armónico de octava (brillo inicial que decae rápido)
+            const osc2 = ctx.createOscillator();
+            osc2.type = "sine";
+            osc2.frequency.setValueAtTime(baseFreq * 2, now);
+            osc2.frequency.exponentialRampToValueAtTime(baseFreq * 2.2, now + dur * 0.1);
+
+            // Envolvente: ataque rápido, sustain, decay largo
+            const gain1 = ctx.createGain();
+            gain1.gain.setValueAtTime(0.001, now);
+            gain1.gain.exponentialRampToValueAtTime(0.07, now + 0.008);  // ataque
+            gain1.gain.setValueAtTime(0.07, now + 0.04);                  // sustain breve
+            gain1.gain.exponentialRampToValueAtTime(0.001, now + dur);    // decay
+
+            const gain2 = ctx.createGain();
+            gain2.gain.setValueAtTime(0.001, now);
+            gain2.gain.exponentialRampToValueAtTime(0.025, now + 0.006);
+            gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+
+            osc1.connect(gain1).connect(ctx.destination);
+            osc2.connect(gain2).connect(ctx.destination);
+
+            osc1.start(now); osc1.stop(now + dur);
+            osc2.start(now); osc2.stop(now + dur * 0.5);
         } catch (_) { /* audio no disponible */ }
     }
 

@@ -116,7 +116,7 @@ export class CTSettingTab extends PluginSettingTab {
         new Setting(containerEl).setName("Sonido").setHeading();
         new Setting(containerEl)
             .setName("Beeps durante replay")
-            .setDesc("Un tono sutil al aparecer cada nodo en la reproducción animada. Frecuencia distinta por tipo: navegación (agudo), lecturas (medio), búsquedas (grave), comandos (más grave).")
+            .setDesc("Un ping dramático al aparecer cada nodo: sweep de frecuencia + armónico de octava sincronizado con la onda expansiva. Tono distinto por tipo: navegación (C6), lecturas (G5), búsquedas (D5), comandos (A4).")
             .addToggle(t => t
                 .setValue(this.plugin.settings.replayBeeps)
                 .onChange(async (v) => {
