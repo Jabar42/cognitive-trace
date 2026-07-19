@@ -37,6 +37,7 @@ export class TimelineView extends ItemView {
     private events: TraceEvent[];
     private settings: CTSettings;
     activePipes = new Set<string>(["traverse", "read", "search", "commands"]);
+    private replayCycles = 1; // cuántos prompts reproducir (1 = solo el clickeado)
     private onFilterChange: (() => void) | null = null;
     private onActivatePrompt: ((events: TraceEvent[]) => void) | null = null;
 
@@ -95,6 +96,20 @@ export class TimelineView extends ItemView {
                 if (this.onFilterChange) this.onFilterChange();
             });
         }
+
+        // Control de ciclos: cuántos prompts reproducir al clickear ▶
+        const cycleCtl = toolbar.createEl("div", { cls: "trace-cycle-ctl" });
+        const minusBtn = cycleCtl.createEl("button", { cls: "trace-cycle-btn", text: "−" });
+        const cycleLabel = cycleCtl.createEl("span", { cls: "trace-cycle-label", text: `${this.replayCycles}` });
+        const plusBtn = cycleCtl.createEl("button", { cls: "trace-cycle-btn", text: "+" });
+        minusBtn.addEventListener("click", (ev) => {
+            ev.stopPropagation();
+            if (this.replayCycles > 1) { this.replayCycles--; cycleLabel.setText(`${this.replayCycles}`); }
+        });
+        plusBtn.addEventListener("click", (ev) => {
+            ev.stopPropagation();
+            if (this.replayCycles < 20) { this.replayCycles++; cycleLabel.setText(`${this.replayCycles}`); }
+        });
 
         this.renderEventList(container, counts);
     }
@@ -188,19 +203,26 @@ export class TimelineView extends ItemView {
             // Botón para activar este prompt en el grafo
             if (this.onActivatePrompt) {
                 const activateBtn = header.createEl("button", { cls: "trace-prompt-activate", text: "▶" });
-                activateBtn.title = "Reproducir este prompt en el grafo (animado)";
+                const title = this.replayCycles === 1
+                    ? "Reproducir este prompt en el grafo (animado)"
+                    : `Reproducir ${this.replayCycles} prompts en el grafo (animado)`;
+                activateBtn.title = title;
                 activateBtn.addEventListener("click", (ev) => {
                     ev.stopPropagation();
-                    // Feedback inmediato: resetear todos los botones, marcar este como activo
                     list.querySelectorAll(".trace-prompt-activate").forEach((b) => {
                         (b as HTMLElement).classList.remove("trace-prompt-playing");
                         (b as HTMLElement).setText("▶");
                     });
                     activateBtn.classList.add("trace-prompt-playing");
                     activateBtn.setText("⏸");
-                    this.onActivatePrompt!(prompt.events);
-                    // Auto-limpiar cuando termine (~ eventos * delay + margen)
-                    const estDuration = prompt.events.length * 500 + 1500;
+                    // Recolectar eventos de este prompt + N-1 anteriores
+                    const allEvents: TraceEvent[] = [];
+                    for (let j = 0; j < this.replayCycles && (pi + j) < prompts.length; j++) {
+                        allEvents.push(...prompts[pi + j].events);
+                    }
+                    this.onActivatePrompt!(allEvents);
+                    const totalEvents = allEvents.length;
+                    const estDuration = totalEvents * 500 + 2000;
                     window.setTimeout(() => {
                         activateBtn.classList.remove("trace-prompt-playing");
                         activateBtn.setText("▶");
