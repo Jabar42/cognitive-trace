@@ -95,7 +95,7 @@ export default class CognitiveTracePlugin extends Plugin {
         this.registerView(
             TIMELINE_VIEW_TYPE,
             (leaf) => {
-                const view = new TimelineView(leaf, this.eventsBuffer, () => {
+                const view = new TimelineView(leaf, this.eventsBuffer, this.settings, () => {
                     this.animator?.refresh();
                 }, (events: TraceEvent[]) => {
                     this.animator?.replayPrompt(events);
@@ -144,8 +144,11 @@ export default class CognitiveTracePlugin extends Plugin {
 
     async saveSettings(): Promise<void> {
         await this.saveData(this.settings);
-        // Re-aplicar en vivo: los colores/toggles se leen del objeto settings compartido
         this.animator?.refresh();
+        // Refrescar timeline para que chips/dots tomen los colores nuevos
+        for (const leaf of this.app.workspace.getLeavesOfType(TIMELINE_VIEW_TYPE)) {
+            try { (leaf.view as TimelineView).refresh(this.eventsBuffer); } catch (_) {}
+        }
     }
 
     async onunload(): Promise<void> {

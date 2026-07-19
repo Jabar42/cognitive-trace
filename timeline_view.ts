@@ -2,6 +2,7 @@
 // v3: diseño compacto con contadores por pipe y badge X/Y visible/invisible
 import { ItemView, WorkspaceLeaf } from "obsidian";
 import { TraceEvent } from "./event_reader";
+import { CTSettings } from "./settings";
 
 export const TIMELINE_VIEW_TYPE = "cognitive-trace-timeline";
 
@@ -12,35 +13,42 @@ const TOOL_ICONS: Record<string, string> = {
 };
 
 interface FilterPipe {
-    key: string; label: string; color: string;
+    key: string; label: string;
+    getColor: (s: CTSettings) => string;
     match: (e: TraceEvent) => boolean;
 }
 
-const PIPES: FilterPipe[] = [
-    { key: "traverse", label: "Navegación", color: "#FFD700",
-      match: (e) => e.type !== "command" && e.tool === "okf_traverse" },
-    { key: "read", label: "Lecturas", color: "#B388FF",
-      match: (e) => e.type !== "command" && e.tool === "okf_read" },
-    { key: "search", label: "Búsquedas", color: "#4FC3F7",
-      match: (e) => e.type !== "command" && ["okf_search","okf_graph","okf_health","okf_index","okf_touch","okf_new"].includes(e.tool || "") },
-    { key: "commands", label: "Comandos", color: "#FF6B35",
-      match: (e) => e.type === "command" },
-];
+function makePipes(settings: CTSettings): FilterPipe[] {
+    return [
+        { key: "traverse", label: "Navegación", getColor: (s) => s.colorCurrent,
+          match: (e) => e.type !== "command" && e.tool === "okf_traverse" },
+        { key: "read", label: "Lecturas", getColor: (s) => s.colorRead,
+          match: (e) => e.type !== "command" && e.tool === "okf_read" },
+        { key: "search", label: "Búsquedas", getColor: (s) => s.colorVisited,
+          match: (e) => e.type !== "command" && ["okf_search","okf_graph","okf_health","okf_index","okf_touch","okf_new"].includes(e.tool || "") },
+        { key: "commands", label: "Comandos", getColor: (s) => s.colorCommand,
+          match: (e) => e.type === "command" },
+    ];
+}
 
 const MAX_VISIBLE = 200;
 
 export class TimelineView extends ItemView {
     private events: TraceEvent[];
-    activePipes = new Set<string>(PIPES.map((p) => p.key));
+    private settings: CTSettings;
+    activePipes = new Set<string>(["traverse", "read", "search", "commands"]);
     private onFilterChange: (() => void) | null = null;
     private onActivatePrompt: ((events: TraceEvent[]) => void) | null = null;
 
-    constructor(leaf: WorkspaceLeaf, events: TraceEvent[], onFilterChange?: () => void, onActivatePrompt?: (events: TraceEvent[]) => void) {
+    constructor(leaf: WorkspaceLeaf, events: TraceEvent[], settings: CTSettings, onFilterChange?: () => void, onActivatePrompt?: (events: TraceEvent[]) => void) {
         super(leaf);
         this.events = events;
+        this.settings = settings;
         this.onFilterChange = onFilterChange || null;
         this.onActivatePrompt = onActivatePrompt || null;
     }
+
+    private pipes(): FilterPipe[] { return makePipes(this.settings); }
 
     getViewType(): string { return TIMELINE_VIEW_TYPE; }
     getDisplayText(): string { return "Cognitive Trace"; }
@@ -67,15 +75,16 @@ export class TimelineView extends ItemView {
         // ── Filters ──
         const counts = this.countByPipe();
         const toolbar = container.createEl("div", { cls: "trace-filters" });
-        for (const pipe of PIPES) {
+        for (const pipe of this.pipes()) {
             const active = this.activePipes.has(pipe.key);
             const n = counts[pipe.key] || 0;
             const btn = toolbar.createEl("button", {
                 cls: "trace-filter-chip" + (active ? "" : " trace-filter-off"),
             });
-            btn.style.setProperty("--pipe-color", pipe.color);
+            const pc = pipe.getColor(this.settings);
+            btn.style.setProperty("--pipe-color", pc);
             const dot = btn.createEl("span", { cls: "trace-chip-dot" });
-            dot.style.backgroundColor = pipe.color;
+            dot.style.backgroundColor = pc;
             btn.createEl("span", { cls: "trace-chip-label", text: pipe.label });
             btn.createEl("span", { cls: "trace-chip-count", text: String(n) });
             btn.addEventListener("click", () => {
@@ -92,9 +101,10 @@ export class TimelineView extends ItemView {
 
     private countByPipe(): Record<string, number> {
         const counts: Record<string, number> = {};
-        for (const p of PIPES) counts[p.key] = 0;
+        const pipes = this.pipes();
+        for (const p of pipes) counts[p.key] = 0;
         for (const e of this.events) {
-            for (const p of PIPES) { if (p.match(e)) { counts[p.key]++; break; } }
+            for (const p of pipes) { if (p.match(e)) { counts[p.key]++; break; } }
         }
         return counts;
     }
@@ -112,7 +122,7 @@ export class TimelineView extends ItemView {
         }
 
         const filtered = [...this.events].reverse().filter((e) => {
-            for (const p of PIPES) { if (this.activePipes.has(p.key) && p.match(e)) return true; }
+            for (const p of this.pipes()) { if (this.activePipes.has(p.key) && p.match(e)) return true; }
             return false;
         });
 
@@ -208,10 +218,10 @@ export class TimelineView extends ItemView {
                 const time = event.ts.slice(11, 19);
                 left.createEl("span", { cls: "trace-time", text: time });
 
-                const pipe = PIPES.find((p) => p.match(event));
+                const pipe = this.pipes().find((p) => p.match(event));
                 if (pipe) {
                     const dot = left.createEl("span", { cls: "trace-event-dot" });
-                    dot.style.backgroundColor = pipe.color;
+                    dot.style.backgroundColor = pipe.getColor(this.settings);
                 }
 
                 const eventBody = row.createEl("div", { cls: "trace-event-body" });
