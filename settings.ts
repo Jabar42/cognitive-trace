@@ -13,6 +13,7 @@ export interface CTSettings {
     pulseIndefinite: boolean; // el nodo actual pulsa en loop hasta que el agente avance
     pulseDuration: number;  // ms
     revealStagger: number;  // ms entre nodos al revelar resultados (0 = todos a la vez)
+    replayBeeps: boolean;   // sonido al aparecer cada nodo durante replay
 }
 
 export const DEFAULT_SETTINGS: CTSettings = {
@@ -26,6 +27,7 @@ export const DEFAULT_SETTINGS: CTSettings = {
     pulseIndefinite: false,
     pulseDuration: 900,
     revealStagger: 80,
+    replayBeeps: true,
 };
 
 export class CTSettingTab extends PluginSettingTab {
@@ -108,6 +110,17 @@ export class CTSettingTab extends PluginSettingTab {
                 .setDynamicTooltip()
                 .onChange(async (v) => {
                     this.plugin.settings.pulseDuration = v;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl).setName("Sonido").setHeading();
+        new Setting(containerEl)
+            .setName("Beeps durante replay")
+            .setDesc("Un tono sutil al aparecer cada nodo en la reproducción animada. Frecuencia distinta por tipo: navegación (agudo), lecturas (medio), búsquedas (grave), comandos (más grave).")
+            .addToggle(t => t
+                .setValue(this.plugin.settings.replayBeeps)
+                .onChange(async (v) => {
+                    this.plugin.settings.replayBeeps = v;
                     await this.plugin.saveSettings();
                 }));
 

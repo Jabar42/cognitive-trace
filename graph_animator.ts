@@ -77,6 +77,33 @@ export class GraphAnimator {
         this.patchAndRefresh();
     }
 
+    private audioCtx: AudioContext | null = null;
+    private replayActive = false;
+
+    /** Beep sutil al aparecer un nodo durante replay. Frecuencia según tipo. */
+    private beep(pipe: PipeKey): void {
+        if (!this.settings.replayBeeps || !this.replayActive) return;
+        try {
+            if (!this.audioCtx) this.audioCtx = new AudioContext();
+            const ctx = this.audioCtx;
+            if (ctx.state === "suspended") ctx.resume();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            const freq: Record<PipeKey, number> = {
+                traverse: 880, read: 660, search: 520, commands: 440,
+            };
+            osc.frequency.value = freq[pipe] || 660;
+            osc.type = "sine";
+            const now = ctx.currentTime;
+            gain.gain.setValueAtTime(0.06, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+            osc.start(now);
+            osc.stop(now + 0.1);
+        } catch (_) { /* audio no disponible */ }
+    }
+
     /** Replay animado de un prompt: limpia el estado y reproduce evento por evento. */
     private replayTimer: number | null = null;
 
@@ -95,12 +122,13 @@ export class GraphAnimator {
         if (this.revealTimer != null) { window.clearTimeout(this.revealTimer); this.revealTimer = null; }
         this.currentNode = null;
         this.patchAndRefresh();
+        this.replayActive = true;
 
-        if (!events.length) return;
+        if (!events.length) { this.replayActive = false; return; }
         const DELAY = 450;
         let i = 0;
         const scheduleNext = () => {
-            if (i >= events.length) { this.replayTimer = null; return; }
+            if (i >= events.length) { this.replayTimer = null; this.replayActive = false; return; }
             const batch: TraceEvent[] = [events[i]];
             const baseTs = new Date(events[i].ts).getTime();
             i++;
@@ -246,6 +274,7 @@ export class GraphAnimator {
         this.revealQueue = [];
         if (this.revealTimer != null) { window.clearTimeout(this.revealTimer); this.revealTimer = null; }
         if (this.replayTimer != null) { window.clearTimeout(this.replayTimer); this.replayTimer = null; }
+        this.replayActive = false;
         this.clearPulses();
         this.patchAndRefresh();
     }
@@ -468,6 +497,10 @@ export class GraphAnimator {
     private spawnPulse(r: any, node: any, rgb: number, beacon = false): void {
         try {
             if (!r?.hanger) return;
+            if (this.replayActive && !beacon) {
+                const pipe = (this.nodePipes.get(node.id || "") || "traverse") as PipeKey;
+                this.beep(pipe);
+            }
             const GraphicsCtor = node.circle?.constructor || r.links?.[0]?.arrow?.constructor;
             if (!GraphicsCtor) return;
             const gfx: any = new GraphicsCtor();
