@@ -148,6 +148,7 @@ export class GraphAnimator {
         this.nodePipes.clear();
         this.pendingPulses.clear();
         this.revealQueue = [];
+        this.queuedCommands.clear();
         this.focusTag = null;
         if (this.revealTimer != null) { window.clearTimeout(this.revealTimer); this.revealTimer = null; }
         this.currentNode = null;
@@ -238,7 +239,14 @@ export class GraphAnimator {
             this.revealTimer = null;
             const path = this.revealQueue.shift();
             if (path == null) return;
-            this.visitedNodes.add(path);
+            // ¿Es un comando encolado?
+            if (this.queuedCommands.has(path)) {
+                this.commandHighlights.set(path, this.queuedCommands.get(path)!);
+                this.nodePipes.set(path, "commands");
+                this.queuedCommands.delete(path);
+            } else {
+                this.visitedNodes.add(path);
+            }
             // Cada nodo de la cascada genera su propio pulso (y beep durante replay)
             if (this.replayActive) this.pendingPulses.add(path);
             this.patchAndRefresh();
@@ -252,17 +260,20 @@ export class GraphAnimator {
     private executeCommand(cmd: TraceEvent): void {
         switch (cmd.action) {
             case "highlight_nodes": case "highlight_most_visited": case "highlight_least_visited":
-                for (const n of cmd.nodes || []) {
-                    if (!this.commandHighlights.has(n)) this.pendingPulses.add(n);
-                    this.commandHighlights.set(n, cmd.color || this.settings.colorCommand);
-                    this.nodePipes.set(n, "commands");
-                }
-                break;
             case "highlight_session":
                 for (const n of cmd.nodes || []) {
-                    if (!this.commandHighlights.has(n)) this.pendingPulses.add(n);
-                    this.commandHighlights.set(n, cmd.color || this.settings.colorCommand);
-                    this.nodePipes.set(n, "commands");
+                    const color = cmd.color || this.settings.colorCommand;
+                    if (this.replayActive) {
+                        // En replay: encolar para revelado escalonado (un nodo por vez)
+                        if (!this.revealQueue.includes(n)) {
+                            this.queuedCommands.set(n, color);
+                            this.revealQueue.push(n);
+                        }
+                    } else {
+                        if (!this.commandHighlights.has(n)) this.pendingPulses.add(n);
+                        this.commandHighlights.set(n, color);
+                        this.nodePipes.set(n, "commands");
+                    }
                 }
                 break;
             case "highlight_path": this.highlightedPath = cmd.nodes || []; break;
@@ -276,6 +287,8 @@ export class GraphAnimator {
 
     // focus_cluster se resuelve en applyColors porque necesita acceso al renderer
     // (links del grafo). Se marca aquí para la siguiente pasada.
+    // Cola de comandos para revelado escalonado durante replay
+    private queuedCommands = new Map<string, string>(); // path → hex color
     private focusTag: string | null = null;
 
     private applyFocusCluster(r: any): void {
@@ -307,6 +320,7 @@ export class GraphAnimator {
         this.highlightedPath = [];
         this.pendingPulses.clear();
         this.revealQueue = [];
+        this.queuedCommands.clear();
         if (this.revealTimer != null) { window.clearTimeout(this.revealTimer); this.revealTimer = null; }
         if (this.replayTimer != null) { window.clearTimeout(this.replayTimer); this.replayTimer = null; }
         this.replayActive = false;
