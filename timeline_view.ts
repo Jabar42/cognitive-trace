@@ -177,11 +177,24 @@ export class TimelineView extends ItemView {
             const count = header.createEl("span", { cls: "trace-prompt-count", text: `${prompt.events.length} eventos` });
             // Botón para activar este prompt en el grafo
             if (this.onActivatePrompt) {
-                const activateBtn = header.createEl("button", { cls: "trace-prompt-activate", text: "⟳" });
+                const activateBtn = header.createEl("button", { cls: "trace-prompt-activate", text: "▶" });
                 activateBtn.title = "Reproducir este prompt en el grafo (animado)";
                 activateBtn.addEventListener("click", (ev) => {
-                    ev.stopPropagation(); // no colapsar/expandir al clickear el botón
+                    ev.stopPropagation();
+                    // Feedback inmediato: resetear todos los botones, marcar este como activo
+                    list.querySelectorAll(".trace-prompt-activate").forEach((b) => {
+                        (b as HTMLElement).classList.remove("trace-prompt-playing");
+                        (b as HTMLElement).setText("▶");
+                    });
+                    activateBtn.classList.add("trace-prompt-playing");
+                    activateBtn.setText("⏸");
                     this.onActivatePrompt!(prompt.events);
+                    // Auto-limpiar cuando termine (~ eventos * delay + margen)
+                    const estDuration = prompt.events.length * 500 + 1500;
+                    window.setTimeout(() => {
+                        activateBtn.classList.remove("trace-prompt-playing");
+                        activateBtn.setText("▶");
+                    }, estDuration);
                 });
             }
 
