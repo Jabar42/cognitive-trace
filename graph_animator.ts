@@ -462,7 +462,7 @@ export class GraphAnimator {
                 if (this.$ctAnimStart) {
                     const elapsed = performance.now() - this.$ctAnimStart;
                     const dur = this.$ctAnimDur || 500;
-                    const t = Math.min(1, elapsed / dur);
+                    const t = Math.max(0, Math.min(1, elapsed / dur));
                     const ease = 1 - (1 - t) * (1 - t); // ease-out
                     this.line.width *= ease;
                     if (this.arrow) this.arrow.alpha = t;
@@ -507,8 +507,9 @@ export class GraphAnimator {
                                (sc.rgb === tc.rgb) ? sc.rgb : neutral;
                 if (link.$ctColor !== target) {
                     link.$ctColor = target;
-                    // Disparar animación de crecimiento si es la primera vez
-                    link.$ctAnimStart = performance.now();
+                    // +16ms: el render nativo ya dibujó este frame con el tint nuevo
+                    // a ancho completo. Adelantar el start evita el flash inicial.
+                    link.$ctAnimStart = performance.now() + 16;
                     link.$ctAnimDur = 500;
                 }
             } else if (link.$ctColor != null) {
