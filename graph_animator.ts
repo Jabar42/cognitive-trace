@@ -187,7 +187,19 @@ export class GraphAnimator {
         return chunk;
     }
 
+    private lastEventTs = 0;
+
     processEvents(events: TraceEvent[]): void {
+        // Gap > 60s desde el último evento → el agente empezó otro prompt.
+        // Limpiar el grafo para que la traza anterior no se acumule.
+        for (const e of events) {
+            const ts = new Date(e.ts).getTime();
+            if (this.lastEventTs > 0 && (ts - this.lastEventTs) > 60_000) {
+                this.clearTraceState();
+                break;
+            }
+            this.lastEventTs = Math.max(this.lastEventTs, ts);
+        }
         for (const e of events) {
             if (e.type === "command") { this.executeCommand(e); continue; }
             if ((e.tool === "okf_traverse" || e.tool === "okf_read") && e.params?.slug) {
@@ -306,7 +318,8 @@ export class GraphAnimator {
         this.focusTag = null; // one-shot
     }
 
-    reset(): void {
+    /** Limpiar traza sin tocar activePipes (filtros del timeline). */
+    private clearTraceState(): void {
         this.visitedNodes.clear();
         this.readNodes.clear();
         this.nodePipes.clear();
@@ -318,9 +331,14 @@ export class GraphAnimator {
         this.revealQueue = [];
         this.queuedCommands.clear();
         if (this.revealTimer != null) { window.clearTimeout(this.revealTimer); this.revealTimer = null; }
+        this.clearPulses();
+    }
+
+    reset(): void {
+        this.clearTraceState();
+        this.nodePipes.clear();
         if (this.replayTimer != null) { window.clearTimeout(this.replayTimer); this.replayTimer = null; }
         this.replayActive = false;
-        this.clearPulses();
         this.patchAndRefresh();
     }
 
