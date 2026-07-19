@@ -177,4 +177,44 @@ describe("GraphAnimator replay audio sync", () => {
         expect((animator as any).nodePipes.get("insights/nuevo-insight.md")).toBe("create");
         expect((animator as any).pulses).toHaveLength(1);
     });
+
+    it("emite beep para un evento realtime sin replay activo", () => {
+        const renderer = makeRenderer(["Notes/live.md"]);
+        const app = { workspace: { on: vi.fn(), getLeavesOfType: vi.fn(() => [{ view: { renderer } }]) } } as any;
+        const animator = new GraphAnimator(app, { ...DEFAULT_SETTINGS, revealStagger: 0 });
+        const audio = new FakeAudioContext();
+        audio.state = "running";
+        (animator as any).audioCtx = audio;
+
+        animator.processEvents([{
+            type: "tool",
+            session: "live",
+            ts: "2026-07-19T04:00:00.000Z",
+            tool: "okf_traverse",
+            params: { slug: "Notes/live" },
+            exit_code: 0,
+        }]);
+
+        expect(audio.oscillators).toHaveLength(2);
+        expect((animator as any).replayActive).toBe(false);
+        expect((animator as any).pulses).toHaveLength(1);
+    });
+
+    it("limpia el grafo al cruzar 60s y conserva solo el último conjunto", () => {
+        const renderer = makeRenderer(["Notes/old.md", "Notes/new.md"]);
+        const app = { workspace: { on: vi.fn(), getLeavesOfType: vi.fn(() => [{ view: { renderer } }]) } } as any;
+        const animator = new GraphAnimator(app, { ...DEFAULT_SETTINGS, revealStagger: 0 });
+
+        animator.loadHistory([{
+            type: "tool", session: "history", ts: "2026-07-19T04:00:00.000Z",
+            tool: "okf_traverse", params: { slug: "Notes/old" }, exit_code: 0,
+        }]);
+        animator.processEvents([{
+            type: "tool", session: "live", ts: "2026-07-19T04:02:00.000Z",
+            tool: "okf_traverse", params: { slug: "Notes/new" }, exit_code: 0,
+        }]);
+
+        expect(renderer.nodes[0].color).toBeNull();
+        expect(renderer.nodes[1].color).not.toBeNull();
+    });
 });

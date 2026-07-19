@@ -90,6 +90,7 @@ export class GraphAnimator {
                 }
             }
         }
+        this.lastEventTs = Math.max(...last.map(e => new Date(e.ts).getTime()));
         this.patchAndRefresh();
     }
 
@@ -98,6 +99,15 @@ export class GraphAnimator {
     // Un pequeño margen permite programar el audio y dejar que el siguiente
     // frame visual comience en el mismo instante perceptual.
     private static readonly APPEARANCE_LEAD_MS = 40;
+
+    /** Desbloquea el audio después de una interacción del usuario. */
+    async unlockAudio(): Promise<void> {
+        if (!this.settings.replayBeeps) return;
+        try {
+            if (!this.audioCtx) this.audioCtx = new AudioContext();
+            if (this.audioCtx.state === "suspended") await this.audioCtx.resume();
+        } catch (_) { /* audio no disponible */ }
+    }
 
     /** Ping programado para el instante de aparición del nodo. */
     private beep(pipe: PipeKey, at?: number): void {
@@ -164,10 +174,7 @@ export class GraphAnimator {
         this.patchAndRefresh();
         // Inicializar AudioContext con user gesture (click ▶) — garantiza running
         if (this.settings.replayBeeps) {
-            try {
-                if (!this.audioCtx) this.audioCtx = new AudioContext();
-                if (this.audioCtx.state === "suspended") await this.audioCtx.resume();
-            } catch (_) {}
+            await this.unlockAudio();
         }
         this.replayActive = true;
 
@@ -210,17 +217,26 @@ export class GraphAnimator {
     private lastEventTs = 0;
 
     processEvents(events: TraceEvent[]): void {
-        // Gap > 60s desde el último evento → el agente empezó otro prompt.
-        // Limpiar el grafo para que la traza anterior no se acumule.
-        for (const e of events) {
+        if (!events.length) return;
+
+        // Si esta tanda contiene uno o más cortes de 60s, conservar solo el
+        // último conjunto temporal. El timeline conserva todos los eventos.
+        let latestStart = 0;
+        let hasGap = false;
+        let previousTs = this.lastEventTs;
+        for (let i = 0; i < events.length; i++) {
+            const e = events[i];
             const ts = new Date(e.ts).getTime();
-            if (this.lastEventTs > 0 && (ts - this.lastEventTs) > 60_000) {
-                this.clearTraceState();
-                break;
+            if (previousTs > 0 && (ts - previousTs) > 60_000) {
+                latestStart = i;
+                hasGap = true;
             }
-            this.lastEventTs = Math.max(this.lastEventTs, ts);
+            previousTs = ts;
         }
-        for (const e of events) {
+        if (hasGap) this.clearTraceState();
+        const currentEvents = events.slice(latestStart);
+        for (const e of currentEvents) {
+            this.lastEventTs = Math.max(this.lastEventTs, new Date(e.ts).getTime());
             if (e.type === "command") { this.executeCommand(e); continue; }
             if (e.tool === "okf_new" && e.params?.created_path && e.exit_code === 0) {
                 const path = e.params.created_path;
@@ -255,7 +271,7 @@ export class GraphAnimator {
                     } else {
                         this.visitedNodes.add(p);
                         // Sin cascada: pulso directo aquí (con cascada lo hace scheduleReveal)
-                        if (isNew && this.replayActive) this.pendingPulses.add(p);
+                        if (isNew) this.pendingPulses.add(p);
                     }
                     const existing = this.nodePipes.get(p);
                     if (existing !== "read") this.nodePipes.set(p, resPipe);
@@ -283,8 +299,8 @@ export class GraphAnimator {
             } else {
                 this.visitedNodes.add(path);
             }
-            // Cada nodo de la cascada genera su propio pulso (y beep durante replay)
-            if (this.replayActive) this.pendingPulses.add(path);
+            // Cada nodo de la cascada genera su propio pulso y beep.
+            this.pendingPulses.add(path);
             this.patchAndRefresh();
             if (this.revealQueue.length) {
                 this.revealTimer = window.setTimeout(step, Math.max(16, this.settings.revealStagger));
@@ -472,7 +488,7 @@ export class GraphAnimator {
                         if (this.nodeMatches(path, key)) {
                             const startAt = performance.now() + GraphAnimator.APPEARANCE_LEAD_MS;
                             const pipe = (this.nodePipes.get(path) || "traverse") as PipeKey;
-                            if (this.replayActive && this.settings.replayBeeps) {
+                            if (this.settings.replayBeeps) {
                                 const delay = Math.max(0, startAt - performance.now()) / 1000;
                                 this.beep(pipe, (this.audioCtx?.currentTime || 0) + delay);
                             }

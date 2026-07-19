@@ -39,6 +39,10 @@ export default class CognitiveTracePlugin extends Plugin {
         try {
             this.reader = new EventReader(vaultPath);
             this.animator = new GraphAnimator(this.app, this.settings);
+            // Web Audio solo puede desbloquearse tras una interacción real del usuario.
+            this.registerDomEvent(document, "pointerdown", () => {
+                void this.animator?.unlockAudio();
+            });
             console.log("[CognitiveTrace] EventReader and GraphAnimator initialized");
         } catch (e) {
             console.error("[CognitiveTrace] Failed to init components:", e);

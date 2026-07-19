@@ -14,7 +14,7 @@ export interface CTSettings {
     pulseIndefinite: boolean; // el nodo actual pulsa en loop hasta que el agente avance
     pulseDuration: number;  // ms
     revealStagger: number;  // ms entre nodos al revelar resultados (0 = todos a la vez)
-    replayBeeps: boolean;   // sonido al aparecer cada nodo durante replay
+    replayBeeps: boolean;   // sonido al aparecer cada nodo en vivo o durante replay
 }
 
 export const DEFAULT_SETTINGS: CTSettings = {
@@ -120,8 +120,8 @@ export class CTSettingTab extends PluginSettingTab {
 
         new Setting(containerEl).setName("Sonido").setHeading();
         new Setting(containerEl)
-            .setName("Beeps durante replay")
-            .setDesc("Un ping dramático al aparecer cada nodo: sweep de frecuencia + armónico de octava sincronizado con la onda expansiva. Tono distinto por tipo: navegación (C6), lecturas (G5), búsquedas (D5), comandos (A4).")
+            .setName("Beeps de aparición")
+            .setDesc("Un ping al aparecer cada nodo en vivo o durante replay. Tono distinto por tipo: navegación (C6), lecturas (G5), búsquedas (D5), creaciones (E6), comandos (A4). Requiere una interacción inicial en Obsidian para desbloquear el audio.")
             .addToggle(t => t
                 .setValue(this.plugin.settings.replayBeeps)
                 .onChange(async (v) => {
