@@ -80,18 +80,18 @@ export class GraphAnimator {
     private audioCtx: AudioContext | null = null;
     private replayActive = false;
 
-    /** Ping dramático sincronizado con la onda expansiva del pulso.
-     *  Sweep de frecuencia descendente + armónico de octava.
-     *  El tono baja mientras el anillo se expande — como si el sonido
-     *  "empujara" la onda hacia afuera. */
-    private beep(pipe: PipeKey): void {
+    /** Ping sincronizado con la onda expansiva del pulso.
+     *  El oscilador se programa con 50ms de retraso respecto al seteo del color:
+     *  el navegador pinta el tint del nodo + el anillo en ~16ms, y el sonido
+     *  llega justo cuando el anillo ya es visible — creando congruencia. */
+    private beep(pipe: PipeKey, delayMs: number = 50): void {
         if (!this.settings.replayBeeps || !this.replayActive) return;
         try {
             if (!this.audioCtx) this.audioCtx = new AudioContext();
             const ctx = this.audioCtx;
             if (ctx.state === "suspended") ctx.resume();
-            const now = ctx.currentTime;
-            const dur = 0.28; // ms totales
+            const now = ctx.currentTime + delayMs / 1000;
+            const dur = 0.28;
 
             const freq: Record<PipeKey, number> = {
                 traverse: 1047, read: 784, search: 587, commands: 440,
