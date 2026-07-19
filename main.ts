@@ -76,8 +76,14 @@ export default class CognitiveTracePlugin extends Plugin {
         try {
             const history = this.reader.readAll();
             console.log(`[CognitiveTrace] Cargando ${history.length} eventos históricos...`);
+            // Poblar el buffer compartido para que el timeline tenga datos
+            this.eventsBuffer.push(...history);
             this.animator?.loadHistory(history);
-            console.log("[CognitiveTrace] Historial cargado — grafo poblado.");
+            console.log("[CognitiveTrace] Historial cargado — grafo + buffer poblados.");
+            // Si el timeline ya está abierto (restaurado por Obsidian), refrescarlo
+            for (const leaf of this.app.workspace.getLeavesOfType(TIMELINE_VIEW_TYPE)) {
+                try { (leaf.view as TimelineView).refresh(this.eventsBuffer); } catch (_) {}
+            }
         } catch (e) {
             console.error("[CognitiveTrace] Error cargando historial:", e);
         }
