@@ -196,7 +196,8 @@ export class GraphAnimator {
             if ((e.tool === "okf_traverse" || e.tool === "okf_read") && e.params?.slug) {
                 const slug = e.params.slug;
                 const pipe: PipeKey = e.tool === "okf_read" ? "read" : "traverse";
-                if (!this.visitedNodes.has(slug) || this.currentNode !== slug) {
+                // Durante replay: siempre pulso, incluso en re-lecturas del mismo nodo
+                if (!this.visitedNodes.has(slug) || this.currentNode !== slug || this.replayActive) {
                     this.pendingPulses.add(slug);
                 }
                 this.visitedNodes.add(slug);
