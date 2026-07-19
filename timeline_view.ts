@@ -194,12 +194,14 @@ export class TimelineView extends ItemView {
 
             // Header del acordeón
             const header = list.createEl("div", { cls: "trace-prompt-header" });
-            const isOpen = pi === 0; // primer prompt (más reciente) abierto por defecto
+            const isOpen = pi === 0;
             const toggle = header.createEl("span", { cls: "trace-prompt-toggle", text: isOpen ? "▼" : "▶" });
             const info = header.createEl("span", { cls: "trace-prompt-info" });
             info.createEl("span", { cls: "trace-prompt-time", text: `${startTime} → ${endTime}` });
-            info.createEl("span", { cls: "trace-prompt-tools", text: `${firstTool} → ${lastTool}` });
-            const count = header.createEl("span", { cls: "trace-prompt-count", text: `${prompt.events.length} eventos` });
+            const meta = info.createEl("span", { cls: "trace-prompt-meta" });
+            meta.createEl("span", { cls: "trace-prompt-tools", text: `${firstTool} → ${lastTool}` });
+            meta.createEl("span", { cls: "trace-prompt-count", text: `${prompt.events.length} evt` });
+
             // Botón para activar este prompt en el grafo
             if (this.onActivatePrompt) {
                 const activateBtn = header.createEl("button", { cls: "trace-prompt-activate", text: "▶" });

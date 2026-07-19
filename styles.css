@@ -237,54 +237,69 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 5px 12px;
-    background: var(--background-secondary);
+    padding: 6px 12px;
+    background: var(--background-primary-alt);
+    border-left: 3px solid var(--text-accent);
     border-bottom: 1px solid var(--background-modifier-border);
     cursor: pointer;
     user-select: none;
     position: sticky;
     top: 0;
     z-index: 2;
+    transition: border-color 0.2s;
 }
 .trace-prompt-header:hover {
     background: var(--background-modifier-hover);
+    border-left-color: var(--text-accent-hover);
 }
 
 .trace-prompt-toggle {
-    font-size: 9px;
-    color: var(--text-faint);
+    font-size: 10px;
+    color: var(--text-muted);
     width: 14px;
     flex-shrink: 0;
+    transition: transform 0.15s;
 }
 
 .trace-prompt-info {
     flex: 1;
     min-width: 0;
     display: flex;
-    gap: 6px;
-    font-size: 10px;
-    font-family: var(--font-monospace);
+    flex-direction: column;
+    gap: 2px;
 }
 
 .trace-prompt-time {
-    color: var(--text-muted);
+    font-size: 10px;
+    color: var(--text-normal);
+    font-weight: 600;
     font-variant-numeric: tabular-nums;
+    font-family: var(--font-monospace);
+}
+
+.trace-prompt-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
 }
 
 .trace-prompt-tools {
+    font-size: 9px;
     color: var(--text-faint);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    font-family: var(--font-monospace);
 }
 
 .trace-prompt-count {
     font-size: 9px;
-    color: var(--text-faint);
-    background: var(--background-modifier-hover);
+    color: var(--text-muted);
+    background: var(--background-modifier-border);
     padding: 1px 6px;
     border-radius: 8px;
     flex-shrink: 0;
+    font-weight: 500;
 }
 
 .trace-prompt-activate {
@@ -322,9 +337,16 @@
 
 .trace-prompt-body {
     overflow: hidden;
+    border-left: 3px solid var(--background-modifier-border);
+    margin-left: 0;
+    background: var(--background-primary);
 }
 .trace-prompt-body.trace-prompt-collapsed {
     display: none;
+}
+/* Línea sutil para mostrar que hay contenido colapsado */
+.trace-prompt-header:has(+ .trace-prompt-collapsed) {
+    border-left-color: var(--text-faint);
 }
 
 .trace-empty {
