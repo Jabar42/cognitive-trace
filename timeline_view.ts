@@ -33,11 +33,13 @@ export class TimelineView extends ItemView {
     private events: TraceEvent[];
     activePipes = new Set<string>(PIPES.map((p) => p.key));
     private onFilterChange: (() => void) | null = null;
+    private onActivatePrompt: ((events: TraceEvent[]) => void) | null = null;
 
-    constructor(leaf: WorkspaceLeaf, events: TraceEvent[], onFilterChange?: () => void) {
+    constructor(leaf: WorkspaceLeaf, events: TraceEvent[], onFilterChange?: () => void, onActivatePrompt?: (events: TraceEvent[]) => void) {
         super(leaf);
         this.events = events;
         this.onFilterChange = onFilterChange || null;
+        this.onActivatePrompt = onActivatePrompt || null;
     }
 
     getViewType(): string { return TIMELINE_VIEW_TYPE; }
@@ -173,6 +175,15 @@ export class TimelineView extends ItemView {
             info.createEl("span", { cls: "trace-prompt-time", text: `${startTime} → ${endTime}` });
             info.createEl("span", { cls: "trace-prompt-tools", text: `${firstTool} → ${lastTool}` });
             const count = header.createEl("span", { cls: "trace-prompt-count", text: `${prompt.events.length} eventos` });
+            // Botón para activar este prompt en el grafo
+            if (this.onActivatePrompt) {
+                const activateBtn = header.createEl("button", { cls: "trace-prompt-activate", text: "⟳" });
+                activateBtn.title = "Mostrar solo este prompt en el grafo";
+                activateBtn.addEventListener("click", (ev) => {
+                    ev.stopPropagation(); // no colapsar/expandir al clickear el botón
+                    this.onActivatePrompt!(prompt.events);
+                });
+            }
 
             // Body del acordeón
             const body = list.createEl("div", { cls: "trace-prompt-body" + (isOpen ? "" : " trace-prompt-collapsed") });

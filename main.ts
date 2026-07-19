@@ -91,12 +91,14 @@ export default class CognitiveTracePlugin extends Plugin {
         this.reader.start();
         console.log("[CognitiveTrace] EventReader started (fs.watch + polling 500ms)");
 
-        // Registrar vista Timeline — comparte activePipes con el animator
+        // Registrar vista Timeline — comparte activePipes y callback de prompt con el animator
         this.registerView(
             TIMELINE_VIEW_TYPE,
             (leaf) => {
                 const view = new TimelineView(leaf, this.eventsBuffer, () => {
                     this.animator?.refresh();
+                }, (events: TraceEvent[]) => {
+                    this.animator?.loadPrompt(events);
                 });
                 if (this.animator) this.animator.activePipes = view.activePipes;
                 return view;

@@ -49,8 +49,46 @@ export class GraphAnimator {
         return isNaN(v) ? 0xffffff : v;
     }
 
-    /** Cargar estado desde el historial sin animaciones ni pulsos (para init). */
+    /** Cargar solo el último prompt del historial (ventana sin gaps >60s). */
     loadHistory(events: TraceEvent[]): void {
+        if (!events.length) return;
+        // Seleccionar solo los eventos del último prompt (sin animaciones ni pulsos)
+        const GAP = 60 * 1000;
+        const last = this.lastPromptEvents(events, GAP);
+        for (const e of last) {
+            if (e.type === "command") { this.executeCommand(e); continue; }
+            if ((e.tool === "okf_traverse" || e.tool === "okf_read") && e.params?.slug) {
+                const slug = e.params.slug;
+                const pipe: PipeKey = e.tool === "okf_read" ? "read" : "traverse";
+                this.visitedNodes.add(slug);
+                this.nodePipes.set(slug, pipe);
+                if (e.tool === "okf_read") this.readNodes.add(slug);
+                this.currentNode = slug;
+            }
+            if (Array.isArray(e.result_nodes)) {
+                const resPipe: PipeKey = (e.tool === "okf_traverse") ? "traverse" : "search";
+                for (const p of e.result_nodes) {
+                    this.visitedNodes.add(p);
+                    const existing = this.nodePipes.get(p);
+                    if (existing !== "read") this.nodePipes.set(p, resPipe);
+                }
+            }
+        }
+        this.patchAndRefresh();
+    }
+
+    /** Cargar un prompt específico — limpia el estado actual y pinta solo estos eventos. */
+    loadPrompt(events: TraceEvent[]): void {
+        this.visitedNodes.clear();
+        this.readNodes.clear();
+        this.commandHighlights.clear();
+        this.highlightedPath = [];
+        this.nodePipes.clear();
+        this.pendingPulses.clear();
+        this.revealQueue = [];
+        this.focusTag = null;
+        if (this.revealTimer != null) { window.clearTimeout(this.revealTimer); this.revealTimer = null; }
+        // Reconstruir estado solo con estos eventos (sin animaciones)
         for (const e of events) {
             if (e.type === "command") { this.executeCommand(e); continue; }
             if ((e.tool === "okf_traverse" || e.tool === "okf_read") && e.params?.slug) {
@@ -65,15 +103,28 @@ export class GraphAnimator {
                 const resPipe: PipeKey = (e.tool === "okf_traverse") ? "traverse" : "search";
                 for (const p of e.result_nodes) {
                     this.visitedNodes.add(p);
-                    // Respetar jerarquía: read > traverse > search. Un nodo leído
-                    // no se degrada a "traverse" por aparecer en result_nodes.
                     const existing = this.nodePipes.get(p);
                     if (existing !== "read") this.nodePipes.set(p, resPipe);
                 }
             }
         }
-        // Aplicar colores SIN cascada ni pulsos
         this.patchAndRefresh();
+    }
+
+    /** Último bloque continuo de eventos (sin gaps > threshold ms entre ellos). */
+    private lastPromptEvents(events: TraceEvent[], gapMs: number): TraceEvent[] {
+        if (events.length <= 1) return events;
+        // Recorrer de atrás hacia adelante hasta encontrar un gap
+        const chunk: TraceEvent[] = [];
+        for (let i = events.length - 1; i >= 0; i--) {
+            chunk.unshift(events[i]);
+            if (i > 0) {
+                const curr = new Date(events[i].ts).getTime();
+                const prev = new Date(events[i - 1].ts).getTime();
+                if (Math.abs(curr - prev) > gapMs) break;
+            }
+        }
+        return chunk;
     }
 
     processEvents(events: TraceEvent[]): void {

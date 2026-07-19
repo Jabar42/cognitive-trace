@@ -247,6 +247,23 @@
     flex-shrink: 0;
 }
 
+.trace-prompt-activate {
+    font-size: 12px;
+    background: transparent;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+    color: var(--text-faint);
+    cursor: pointer;
+    padding: 1px 5px;
+    line-height: 1;
+    flex-shrink: 0;
+}
+.trace-prompt-activate:hover {
+    border-color: var(--text-accent);
+    color: var(--text-accent);
+    background: var(--background-modifier-hover);
+}
+
 .trace-prompt-body {
     overflow: hidden;
 }
