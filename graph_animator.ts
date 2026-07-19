@@ -269,14 +269,18 @@ export class GraphAnimator {
             if (targetColor == null && this.highlightedPath.includes(path)) targetColor = this.hex(this.settings.colorPath);
 
             if (targetColor != null) {
-                // Atenuar si el filtro del timeline correspondiente está apagado
+                // Si el filtro del timeline correspondiente está apagado,
+                // devolver el nodo a su color base de Obsidian (no atenuar).
                 const pipe = this.nodePipes.get(path);
                 const pipeActive = !pipe || !this.activePipes || this.activePipes.has(pipe);
-                const alpha = pipeActive ? 1 : 0.08;
-                const newColor = { a: alpha, rgb: targetColor };
-                if (!node.color || node.color.rgb !== targetColor || node.color.a !== alpha) {
+                if (!pipeActive) {
+                    if (node.color != null) node.color = null;
+                    continue;
+                }
+                const newColor = { a: 1, rgb: targetColor };
+                if (!node.color || node.color.rgb !== targetColor) {
                     node.color = newColor;
-                    if (pipeActive && this.settings.pulseEnabled) {
+                    if (this.settings.pulseEnabled) {
                         for (const key of this.pendingPulses) {
                             if (path.includes(key)) { this.spawnPulse(r, node, targetColor); break; }
                         }
