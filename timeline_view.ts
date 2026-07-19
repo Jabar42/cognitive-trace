@@ -114,7 +114,6 @@ export class TimelineView extends ItemView {
             return false;
         });
 
-        // Badge X/Y
         const totalActive = Object.entries(counts)
             .filter(([k]) => this.activePipes.has(k))
             .reduce((s, [,c]) => s + c, 0);
@@ -128,49 +127,100 @@ export class TimelineView extends ItemView {
         }
 
         const visible = filtered.slice(0, MAX_VISIBLE);
-        let prevTs = 0;
-        const GAP = 60 * 1000; // 60s entre prompts
 
-        for (const event of visible) {
-            // Separador visual entre prompts del agente
-            const eventTs = new Date(event.ts).getTime();
-            if (prevTs > 0 && (eventTs - prevTs) > GAP) {
-                const sep = list.createEl("div", { cls: "trace-prompt-sep" });
-                const mins = Math.round((eventTs - prevTs) / 60000);
-                sep.createEl("span", { cls: "trace-prompt-sep-text", text: "— " + mins + " min de inactividad —" });
+        // Agrupar eventos en prompts (gap > 60s = nuevo prompt)
+        const GAP = 60 * 1000;
+        const prompts: Array<{ events: TraceEvent[]; start: string; end: string }> = [];
+        let current: TraceEvent[] = [];
+
+        for (let i = 0; i < visible.length; i++) {
+            const ev = visible[i];
+            if (current.length > 0) {
+                const prevTs = new Date(visible[i - 1].ts).getTime();
+                const thisTs = new Date(ev.ts).getTime();
+                if ((prevTs - thisTs) > GAP) {
+                    prompts.push({
+                        events: current,
+                        start: current[current.length - 1].ts,
+                        end: current[0].ts,
+                    });
+                    current = [];
+                }
             }
-            prevTs = eventTs;
+            current.push(ev);
+        }
+        if (current.length > 0) {
+            prompts.push({
+                events: current,
+                start: current[current.length - 1].ts,
+                end: current[0].ts,
+            });
+        }
 
-            const row = list.createEl("div", { cls: "trace-event" });
+        // Renderizar cada prompt como acordeón
+        for (let pi = 0; pi < prompts.length; pi++) {
+            const prompt = prompts[pi];
+            const firstTool = prompt.events[prompt.events.length - 1].tool || "?";
+            const lastTool = prompt.events[0].tool || "?";
+            const startTime = prompt.start.slice(11, 19);
+            const endTime = prompt.end.slice(11, 19);
 
-            const left = row.createEl("div", { cls: "trace-event-left" });
-            const time = event.ts.slice(11, 19);
-            left.createEl("span", { cls: "trace-time", text: time });
+            // Header del acordeón
+            const header = list.createEl("div", { cls: "trace-prompt-header" });
+            const isOpen = pi === 0; // primer prompt (más reciente) abierto por defecto
+            const toggle = header.createEl("span", { cls: "trace-prompt-toggle", text: isOpen ? "▼" : "▶" });
+            const info = header.createEl("span", { cls: "trace-prompt-info" });
+            info.createEl("span", { cls: "trace-prompt-time", text: `${startTime} → ${endTime}` });
+            info.createEl("span", { cls: "trace-prompt-tools", text: `${firstTool} → ${lastTool}` });
+            const count = header.createEl("span", { cls: "trace-prompt-count", text: `${prompt.events.length} eventos` });
 
-            const pipe = PIPES.find((p) => p.match(event));
-            if (pipe) {
-                const dot = left.createEl("span", { cls: "trace-event-dot" });
-                dot.style.backgroundColor = pipe.color;
+            // Body del acordeón
+            const body = list.createEl("div", { cls: "trace-prompt-body" + (isOpen ? "" : " trace-prompt-collapsed") });
+
+            for (const event of prompt.events) {
+                const row = body.createEl("div", { cls: "trace-event" });
+
+                const left = row.createEl("div", { cls: "trace-event-left" });
+                const time = event.ts.slice(11, 19);
+                left.createEl("span", { cls: "trace-time", text: time });
+
+                const pipe = PIPES.find((p) => p.match(event));
+                if (pipe) {
+                    const dot = left.createEl("span", { cls: "trace-event-dot" });
+                    dot.style.backgroundColor = pipe.color;
+                }
+
+                const eventBody = row.createEl("div", { cls: "trace-event-body" });
+                if (event.type === "command") {
+                    eventBody.createEl("span", { cls: "trace-event-text", text: `⚡ ${event.action || "?"}` });
+                    const extra: string[] = [];
+                    if (event.nodes?.length) extra.push(`${event.nodes.length} nodos`);
+                    if (event.tag) extra.push(`#${event.tag}`);
+                    if (extra.length) eventBody.createEl("span", { cls: "trace-event-extra", text: extra.join(" · ") });
+                } else {
+                    const icon = TOOL_ICONS[event.tool || ""] || "•";
+                    const slug = event.params?.slug || event.params?.query || "";
+                    let text = `${icon} ${event.tool || "?"}`;
+                    if (slug) text += ` → ${slug}`;
+                    eventBody.createEl("span", { cls: "trace-event-text", text });
+                    const extra: string[] = [];
+                    if (event.result_nodes?.length) extra.push(`+${event.result_nodes.length} nodos`);
+                    if (event.duration_ms) extra.push(`${event.duration_ms}ms`);
+                    if (extra.length) eventBody.createEl("span", { cls: "trace-event-extra", text: extra.join(" · ") });
+                }
             }
 
-            const body = row.createEl("div", { cls: "trace-event-body" });
-            if (event.type === "command") {
-                body.createEl("span", { cls: "trace-event-text", text: `⚡ ${event.action || "?"}` });
-                const extra: string[] = [];
-                if (event.nodes?.length) extra.push(`${event.nodes.length} nodos`);
-                if (event.tag) extra.push(`#${event.tag}`);
-                if (extra.length) body.createEl("span", { cls: "trace-event-extra", text: extra.join(" · ") });
-            } else {
-                const icon = TOOL_ICONS[event.tool || ""] || "•";
-                const slug = event.params?.slug || event.params?.query || "";
-                let text = `${icon} ${event.tool || "?"}`;
-                if (slug) text += ` → ${slug}`;
-                body.createEl("span", { cls: "trace-event-text", text });
-                const extra: string[] = [];
-                if (event.result_nodes?.length) extra.push(`+${event.result_nodes.length} nodos`);
-                if (event.duration_ms) extra.push(`${event.duration_ms}ms`);
-                if (extra.length) body.createEl("span", { cls: "trace-event-extra", text: extra.join(" · ") });
-            }
+            // Toggle click
+            header.addEventListener("click", () => {
+                const collapsed = body.classList.contains("trace-prompt-collapsed");
+                if (collapsed) {
+                    body.classList.remove("trace-prompt-collapsed");
+                    toggle.setText("▼");
+                } else {
+                    body.classList.add("trace-prompt-collapsed");
+                    toggle.setText("▶");
+                }
+            });
         }
     }
 

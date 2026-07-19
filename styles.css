@@ -191,24 +191,67 @@
     white-space: nowrap;
 }
 
-/* ── Prompt separators ── */
+/* ── Prompt accordion ── */
 
-.trace-prompt-sep {
+.trace-prompt-header {
     display: flex;
-    justify-content: center;
-    padding: 6px 12px;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 12px;
+    background: var(--background-secondary);
     border-bottom: 1px solid var(--background-modifier-border);
+    cursor: pointer;
+    user-select: none;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+}
+.trace-prompt-header:hover {
+    background: var(--background-modifier-hover);
 }
 
-.trace-prompt-sep-text {
+.trace-prompt-toggle {
     font-size: 9px;
     color: var(--text-faint);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    background: var(--background-primary);
-    padding: 1px 8px;
+    width: 14px;
+    flex-shrink: 0;
+}
+
+.trace-prompt-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    gap: 6px;
+    font-size: 10px;
+    font-family: var(--font-monospace);
+}
+
+.trace-prompt-time {
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.trace-prompt-tools {
+    color: var(--text-faint);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.trace-prompt-count {
+    font-size: 9px;
+    color: var(--text-faint);
+    background: var(--background-modifier-hover);
+    padding: 1px 6px;
     border-radius: 8px;
-    border: 1px solid var(--background-modifier-border);
+    flex-shrink: 0;
+}
+
+.trace-prompt-body {
+    overflow: hidden;
+}
+.trace-prompt-body.trace-prompt-collapsed {
+    display: none;
 }
 
 .trace-empty {

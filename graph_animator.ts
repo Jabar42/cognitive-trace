@@ -336,6 +336,15 @@ export class GraphAnimator {
             const sc = link.source?.color;
             const tc = link.target?.color;
             if (sc && tc) {
+                // Verificar que ambos endpoints tengan su pipe activo (filtros del timeline)
+                const sp = this.nodePipes.get(link.source?.id || "");
+                const tp = this.nodePipes.get(link.target?.id || "");
+                const bothActive = (!sp || !this.activePipes || this.activePipes.has(sp)) &&
+                                   (!tp || !this.activePipes || this.activePipes.has(tp));
+                if (!bothActive) {
+                    if (link.$ctColor != null) link.$ctColor = null;
+                    continue;
+                }
                 // Color de current si toca ese nodo; hereda el color si ambos endpoints
                 // coinciden (visitados, path, highlights); neutro (visitados) si son mixtos.
                 if (sc.rgb === gold || tc.rgb === gold) link.$ctColor = gold;
