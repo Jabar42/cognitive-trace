@@ -97,12 +97,10 @@ export class GraphAnimator {
         this.patchAndRefresh();
 
         if (!events.length) return;
-        // Reproducir secuencialmente: cada evento por processEvents (con pulsos, cascada)
-        const DELAY = 450; // ms entre eventos — ritmo de lectura del agente
+        const DELAY = 450;
         let i = 0;
-        const step = () => {
+        const scheduleNext = () => {
             if (i >= events.length) { this.replayTimer = null; return; }
-            // Agrupar eventos muy cercanos (<2s) en un solo tick para no ralentizar
             const batch: TraceEvent[] = [events[i]];
             const baseTs = new Date(events[i].ts).getTime();
             i++;
@@ -112,9 +110,10 @@ export class GraphAnimator {
                 else break;
             }
             this.processEvents(batch);
-            this.replayTimer = window.setTimeout(step, DELAY);
+            this.replayTimer = window.setTimeout(scheduleNext, DELAY);
         };
-        this.replayTimer = window.setTimeout(step, DELAY);
+        // Primer batch inmediato — sin delay inicial
+        scheduleNext();
     }
 
     /** Último bloque continuo de eventos (sin gaps > threshold ms entre ellos). */
