@@ -233,17 +233,33 @@ export class GraphAnimator {
                     break;
                 }
             }
-            if (targetColor == null && this.currentNode && path.includes(this.currentNode)) targetColor = this.hex(this.settings.colorCurrent);
+            // ── Prioridad de color (mayor a menor) ──
+            // En cada match guardamos nodePipes con path COMPLETO (node.id),
+            // no con el slug parcial. Map.get() es exacto; si no, el filtro
+            // de atenuación nunca encuentra el pipe y el nodo nunca se atenúa.
+            if (targetColor == null && this.currentNode && path.includes(this.currentNode)) {
+                targetColor = this.hex(this.settings.colorCurrent);
+                let isRead = false;
+                for (const rn of this.readNodes) { if (path.includes(rn)) { isRead = true; break; } }
+                this.nodePipes.set(path, isRead ? "read" : "traverse");
+            }
             if (targetColor == null) {
                 // Leídos (body en contexto) tienen prioridad sobre vistos (solo ficha)
                 let isRead = false;
                 for (const rn of this.readNodes) { if (path.includes(rn)) { isRead = true; break; } }
-                if (isRead) targetColor = this.hex(this.settings.colorRead);
+                if (isRead) {
+                    targetColor = this.hex(this.settings.colorRead);
+                    this.nodePipes.set(path, "read");
+                }
             }
             if (targetColor == null) {
                 let visited = false;
                 for (const vn of this.visitedNodes) { if (path.includes(vn)) { visited = true; break; } }
-                if (visited) targetColor = this.hex(this.settings.colorVisited);
+                if (visited) {
+                    targetColor = this.hex(this.settings.colorVisited);
+                    // Solo si no tenía pipe (result_nodes ya lo setearon con path completo)
+                    if (!this.nodePipes.has(path)) this.nodePipes.set(path, "traverse");
+                }
             }
             if (targetColor == null && this.highlightedPath.includes(path)) targetColor = this.hex(this.settings.colorPath);
 
