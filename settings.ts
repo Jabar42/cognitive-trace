@@ -8,6 +8,7 @@ export interface CTSettings {
     colorVisited: string;   // nodos cuya ficha apareció en resultados (traverse/search)
     colorPath: string;      // highlight_path
     colorCommand: string;   // default de highlight_nodes
+    colorCreate: string;    // archivos creados vía okf_new
     edgeColoring: boolean;  // colorear aristas entre nodos iluminados
     pulseEnabled: boolean;  // onda expansiva al pintar
     pulseIndefinite: boolean; // el nodo actual pulsa en loop hasta que el agente avance
@@ -22,6 +23,7 @@ export const DEFAULT_SETTINGS: CTSettings = {
     colorVisited: "#4FC3F7",
     colorPath: "#00FF00",
     colorCommand: "#FF6B35",
+    colorCreate: "#FF4FD8",
     edgeColoring: true,
     pulseEnabled: true,
     pulseIndefinite: false,
@@ -42,7 +44,7 @@ export class CTSettingTab extends PluginSettingTab {
         const { containerEl } = this;
         containerEl.empty();
 
-        const color = (name: string, desc: string, key: "colorCurrent" | "colorRead" | "colorVisited" | "colorPath" | "colorCommand") => {
+        const color = (name: string, desc: string, key: "colorCurrent" | "colorRead" | "colorVisited" | "colorPath" | "colorCommand" | "colorCreate") => {
             new Setting(containerEl)
                 .setName(name)
                 .setDesc(desc)
@@ -70,6 +72,9 @@ export class CTSettingTab extends PluginSettingTab {
         color("Highlight de comandos",
             "Color default cuando el agente resalta nodos vía okf_graph_command (highlight_nodes, most/least visited).",
             "colorCommand");
+        color("Nodos creados",
+            "Archivos nuevos creados por el agente mediante okf_new.",
+            "colorCreate");
 
         new Setting(containerEl).setName("Aristas").setHeading();
         new Setting(containerEl)

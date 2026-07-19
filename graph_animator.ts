@@ -6,7 +6,7 @@ import { TraceEvent } from "./event_reader";
 import { CTSettings } from "./settings";
 
 // Compartido con TimelineView para que los filtros controlen también el grafo
-export type PipeKey = "traverse" | "read" | "search" | "commands";
+export type PipeKey = "traverse" | "read" | "search" | "create" | "commands";
 
 export class GraphAnimator {
     private app: App;
@@ -14,6 +14,7 @@ export class GraphAnimator {
     private enabled = true;
     private visitedNodes = new Set<string>();
     private readNodes = new Set<string>();  // body completo leído vía okf_read
+    private createdNodes = new Set<string>(); // archivos creados vía okf_new
     private currentNode: string | null = null;
     // Pipe de origen por nodo → atenúa si el filtro del timeline está off
     private nodePipes = new Map<string, PipeKey>();
@@ -65,6 +66,13 @@ export class GraphAnimator {
         const last = this.lastPromptEvents(events, GAP);
         for (const e of last) {
             if (e.type === "command") { this.executeCommand(e); continue; }
+            if (e.tool === "okf_new" && e.params?.created_path && e.exit_code === 0) {
+                const path = e.params.created_path;
+                this.createdNodes.add(path);
+                this.visitedNodes.add(path);
+                this.nodePipes.set(path, "create");
+                continue;
+            }
             if ((e.tool === "okf_traverse" || e.tool === "okf_read") && e.params?.slug) {
                 const slug = e.params.slug;
                 const pipe: PipeKey = e.tool === "okf_read" ? "read" : "traverse";
@@ -100,7 +108,7 @@ export class GraphAnimator {
             const now = at ?? ctx.currentTime;
             const dur = 0.25;
             const freq: Record<PipeKey, number> = {
-                traverse: 1047, read: 784, search: 587, commands: 440,
+                traverse: 1047, read: 784, search: 587, create: 1319, commands: 440,
             };
             const baseFreq = freq[pipe] || 660;
 
@@ -143,6 +151,7 @@ export class GraphAnimator {
         // Limpiar estado
         this.visitedNodes.clear();
         this.readNodes.clear();
+        this.createdNodes.clear();
         this.commandHighlights.clear();
         this.highlightedPath = [];
         this.nodePipes.clear();
@@ -213,6 +222,14 @@ export class GraphAnimator {
         }
         for (const e of events) {
             if (e.type === "command") { this.executeCommand(e); continue; }
+            if (e.tool === "okf_new" && e.params?.created_path && e.exit_code === 0) {
+                const path = e.params.created_path;
+                this.createdNodes.add(path);
+                this.visitedNodes.add(path);
+                this.nodePipes.set(path, "create");
+                this.pendingPulses.add(path);
+                continue;
+            }
             if ((e.tool === "okf_traverse" || e.tool === "okf_read") && e.params?.slug) {
                 const slug = e.params.slug;
                 const pipe: PipeKey = e.tool === "okf_read" ? "read" : "traverse";
@@ -335,6 +352,7 @@ export class GraphAnimator {
     private clearTraceState(): void {
         this.visitedNodes.clear();
         this.readNodes.clear();
+        this.createdNodes.clear();
         this.currentNode = null;
         this.commandHighlights.clear();
         this.focusTag = null;
@@ -408,6 +426,15 @@ export class GraphAnimator {
                 let isRead = false;
                 for (const rn of this.readNodes) { if (this.nodeMatches(path, rn)) { isRead = true; break; } }
                 this.nodePipes.set(path, isRead ? "read" : "traverse");
+            }
+            if (targetColor == null) {
+                for (const cn of this.createdNodes) {
+                    if (this.nodeMatches(path, cn)) {
+                        targetColor = this.hex(this.settings.colorCreate);
+                        this.nodePipes.set(path, "create");
+                        break;
+                    }
+                }
             }
             if (targetColor == null) {
                 // Leídos (body en contexto) tienen prioridad sobre vistos (solo ficha)

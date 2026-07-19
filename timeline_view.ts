@@ -25,7 +25,9 @@ function makePipes(settings: CTSettings): FilterPipe[] {
         { key: "read", label: "Lecturas", getColor: (s) => s.colorRead,
           match: (e) => e.type !== "command" && e.tool === "okf_read" },
         { key: "search", label: "Búsquedas", getColor: (s) => s.colorVisited,
-          match: (e) => e.type !== "command" && ["okf_search","okf_graph","okf_health","okf_index","okf_touch","okf_new"].includes(e.tool || "") },
+          match: (e) => e.type !== "command" && ["okf_search","okf_graph","okf_health","okf_index","okf_touch"].includes(e.tool || "") },
+        { key: "create", label: "Creaciones", getColor: (s) => s.colorCreate,
+          match: (e) => e.type !== "command" && e.tool === "okf_new" },
         { key: "commands", label: "Comandos", getColor: (s) => s.colorCommand,
           match: (e) => e.type === "command" },
     ];
@@ -36,7 +38,7 @@ const MAX_VISIBLE = 200;
 export class TimelineView extends ItemView {
     private events: TraceEvent[];
     private settings: CTSettings;
-    activePipes = new Set<string>(["traverse", "read", "search", "commands"]);
+    activePipes = new Set<string>(["traverse", "read", "search", "create", "commands"]);
     private replayCycles = 1; // cuántos prompts reproducir (1 = solo el clickeado)
     private onFilterChange: (() => void) | null = null;
     private onActivatePrompt: ((events: TraceEvent[]) => void) | null = null;

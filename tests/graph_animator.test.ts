@@ -88,6 +88,17 @@ function makeEvent(result_nodes: string[]) {
     };
 }
 
+function makeCreateEvent(created_path: string) {
+    return {
+        type: "tool" as const,
+        session: "test",
+        ts: "2026-07-19T04:00:00.000Z",
+        tool: "okf_new",
+        params: { created_path },
+        exit_code: 0,
+    };
+}
+
 describe("GraphAnimator replay audio sync", () => {
     beforeEach(() => {
         vi.useFakeTimers();
@@ -150,5 +161,20 @@ describe("GraphAnimator replay audio sync", () => {
         expect((animator as any).pulses).toHaveLength(1);
         expect(renderer.nodes[0].color).not.toBeNull();
         expect(renderer.nodes[1].color).toBeNull();
+    });
+
+    it("representa okf_new con su pipe create", async () => {
+        const renderer = makeRenderer(["insights/nuevo-insight.md"]);
+        const app = { workspace: { on: vi.fn(), getLeavesOfType: vi.fn(() => [{ view: { renderer } }]) } } as any;
+        const animator = new GraphAnimator(app, { ...DEFAULT_SETTINGS, revealStagger: 0 });
+        const replay = animator.replayPrompt([makeCreateEvent("insights/nuevo-insight.md")]);
+        const audio = FakeAudioContext.instances[0];
+        audio.finishResume();
+        await replay;
+
+        expect(audio.oscillators).toHaveLength(2);
+        expect(renderer.nodes[0].color?.rgb).toBe(0xFF4FD8);
+        expect((animator as any).nodePipes.get("insights/nuevo-insight.md")).toBe("create");
+        expect((animator as any).pulses).toHaveLength(1);
     });
 });
