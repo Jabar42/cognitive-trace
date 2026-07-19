@@ -65,7 +65,10 @@ export class GraphAnimator {
                 const resPipe: PipeKey = (e.tool === "okf_traverse") ? "traverse" : "search";
                 for (const p of e.result_nodes) {
                     this.visitedNodes.add(p);
-                    this.nodePipes.set(p, resPipe);
+                    // Respetar jerarquía: read > traverse > search. Un nodo leído
+                    // no se degrada a "traverse" por aparecer en result_nodes.
+                    const existing = this.nodePipes.get(p);
+                    if (existing !== "read") this.nodePipes.set(p, resPipe);
                 }
             }
         }
@@ -99,7 +102,9 @@ export class GraphAnimator {
                     } else {
                         this.visitedNodes.add(p);
                     }
-                    this.nodePipes.set(p, resPipe);
+                    // Respetar jerarquía de pipes: read > traverse > search
+                    const existing = this.nodePipes.get(p);
+                    if (existing !== "read") this.nodePipes.set(p, resPipe);
                 }
             }
         }
