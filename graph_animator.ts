@@ -77,8 +77,13 @@ export class GraphAnimator {
         this.patchAndRefresh();
     }
 
-    /** Cargar un prompt específico — limpia el estado actual y pinta solo estos eventos. */
-    loadPrompt(events: TraceEvent[]): void {
+    /** Replay animado de un prompt: limpia el estado y reproduce evento por evento. */
+    private replayTimer: number | null = null;
+
+    replayPrompt(events: TraceEvent[]): void {
+        // Cancelar replay anterior
+        if (this.replayTimer != null) { window.clearTimeout(this.replayTimer); this.replayTimer = null; }
+        // Limpiar estado
         this.visitedNodes.clear();
         this.readNodes.clear();
         this.commandHighlights.clear();
@@ -88,27 +93,28 @@ export class GraphAnimator {
         this.revealQueue = [];
         this.focusTag = null;
         if (this.revealTimer != null) { window.clearTimeout(this.revealTimer); this.revealTimer = null; }
-        // Reconstruir estado solo con estos eventos (sin animaciones)
-        for (const e of events) {
-            if (e.type === "command") { this.executeCommand(e); continue; }
-            if ((e.tool === "okf_traverse" || e.tool === "okf_read") && e.params?.slug) {
-                const slug = e.params.slug;
-                const pipe: PipeKey = e.tool === "okf_read" ? "read" : "traverse";
-                this.visitedNodes.add(slug);
-                this.nodePipes.set(slug, pipe);
-                if (e.tool === "okf_read") this.readNodes.add(slug);
-                this.currentNode = slug;
-            }
-            if (Array.isArray(e.result_nodes)) {
-                const resPipe: PipeKey = (e.tool === "okf_traverse") ? "traverse" : "search";
-                for (const p of e.result_nodes) {
-                    this.visitedNodes.add(p);
-                    const existing = this.nodePipes.get(p);
-                    if (existing !== "read") this.nodePipes.set(p, resPipe);
-                }
-            }
-        }
+        this.currentNode = null;
         this.patchAndRefresh();
+
+        if (!events.length) return;
+        // Reproducir secuencialmente: cada evento por processEvents (con pulsos, cascada)
+        const DELAY = 450; // ms entre eventos — ritmo de lectura del agente
+        let i = 0;
+        const step = () => {
+            if (i >= events.length) { this.replayTimer = null; return; }
+            // Agrupar eventos muy cercanos (<2s) en un solo tick para no ralentizar
+            const batch: TraceEvent[] = [events[i]];
+            const baseTs = new Date(events[i].ts).getTime();
+            i++;
+            while (i < events.length) {
+                const nextTs = new Date(events[i].ts).getTime();
+                if (Math.abs(nextTs - baseTs) < 2000) { batch.push(events[i]); i++; }
+                else break;
+            }
+            this.processEvents(batch);
+            this.replayTimer = window.setTimeout(step, DELAY);
+        };
+        this.replayTimer = window.setTimeout(step, DELAY);
     }
 
     /** Último bloque continuo de eventos (sin gaps > threshold ms entre ellos). */
@@ -240,6 +246,7 @@ export class GraphAnimator {
         this.pendingPulses.clear();
         this.revealQueue = [];
         if (this.revealTimer != null) { window.clearTimeout(this.revealTimer); this.revealTimer = null; }
+        if (this.replayTimer != null) { window.clearTimeout(this.replayTimer); this.replayTimer = null; }
         this.clearPulses();
         this.patchAndRefresh();
     }

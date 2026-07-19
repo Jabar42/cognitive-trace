@@ -178,7 +178,7 @@ export class TimelineView extends ItemView {
             // Botón para activar este prompt en el grafo
             if (this.onActivatePrompt) {
                 const activateBtn = header.createEl("button", { cls: "trace-prompt-activate", text: "⟳" });
-                activateBtn.title = "Mostrar solo este prompt en el grafo";
+                activateBtn.title = "Reproducir este prompt en el grafo (animado)";
                 activateBtn.addEventListener("click", (ev) => {
                     ev.stopPropagation(); // no colapsar/expandir al clickear el botón
                     this.onActivatePrompt!(prompt.events);
