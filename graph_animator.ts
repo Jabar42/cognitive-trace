@@ -49,6 +49,14 @@ export class GraphAnimator {
         return isNaN(v) ? 0xffffff : v;
     }
 
+    /** Coincide un slug con su path sin confundir prefijos ni tags parecidos. */
+    private nodeMatches(path: string, key: string): boolean {
+        if (!path || !key) return false;
+        if (path === key) return true;
+        if (key.startsWith("#")) return false;
+        return path.endsWith("/" + key) || path.endsWith("/" + key + ".md") || path === key + ".md";
+    }
+
     /** Cargar solo el último prompt del historial (ventana sin gaps >60s). */
     loadHistory(events: TraceEvent[]): void {
         if (!events.length) return;
@@ -79,14 +87,17 @@ export class GraphAnimator {
 
     private audioCtx: AudioContext | null = null;
     private replayActive = false;
+    // Un pequeño margen permite programar el audio y dejar que el siguiente
+    // frame visual comience en el mismo instante perceptual.
+    private static readonly APPEARANCE_LEAD_MS = 40;
 
-    /** Ping sincronizado con la onda expansiva del pulso. */
-    private beep(pipe: PipeKey): void {
+    /** Ping programado para el instante de aparición del nodo. */
+    private beep(pipe: PipeKey, at?: number): void {
         try {
             const ctx = this.audioCtx;
 	        if (!ctx || ctx.state !== "running") return;
 
-            const now = ctx.currentTime;
+            const now = at ?? ctx.currentTime;
             const dur = 0.25;
             const freq: Record<PipeKey, number> = {
                 traverse: 1047, read: 784, search: 587, commands: 440,
@@ -126,7 +137,7 @@ export class GraphAnimator {
     /** Replay animado de un prompt: limpia el estado y reproduce evento por evento. */
     private replayTimer: number | null = null;
 
-    replayPrompt(events: TraceEvent[]): void {
+    async replayPrompt(events: TraceEvent[]): Promise<void> {
         // Cancelar replay anterior
         if (this.replayTimer != null) { window.clearTimeout(this.replayTimer); this.replayTimer = null; }
         // Limpiar estado
@@ -146,7 +157,7 @@ export class GraphAnimator {
         if (this.settings.replayBeeps) {
             try {
                 if (!this.audioCtx) this.audioCtx = new AudioContext();
-                if (this.audioCtx.state === "suspended") this.audioCtx.resume();
+                if (this.audioCtx.state === "suspended") await this.audioCtx.resume();
             } catch (_) {}
         }
         this.replayActive = true;
@@ -302,7 +313,7 @@ export class GraphAnimator {
     private applyFocusCluster(r: any): void {
         if (!this.focusTag || !r?.links) return;
         const tagId = "#" + this.focusTag;
-        const tagNode = r.nodes.find((n: any) => n.id === tagId || (n.type === "tag" && (n.id || "").includes(this.focusTag as string)));
+        const tagNode = r.nodes.find((n: any) => n.id === tagId);
         if (!tagNode) return;
         const connected: Set<string> = new Set();
         for (const link of r.links) {
@@ -381,7 +392,7 @@ export class GraphAnimator {
             let targetColor: number | null = null;
 
             for (const [cn, cc] of this.commandHighlights) {
-                if (path.includes(cn)) {
+                if (this.nodeMatches(path, cn)) {
                     targetColor = parseInt(cc.replace("#",""), 16);
                     // Guardar pipe con path completo (no el slug parcial)
                     this.nodePipes.set(path, "commands");
@@ -392,16 +403,16 @@ export class GraphAnimator {
             // En cada match guardamos nodePipes con path COMPLETO (node.id),
             // no con el slug parcial. Map.get() es exacto; si no, el filtro
             // de atenuación nunca encuentra el pipe y el nodo nunca se atenúa.
-            if (targetColor == null && this.currentNode && path.includes(this.currentNode)) {
+            if (targetColor == null && this.currentNode && this.nodeMatches(path, this.currentNode)) {
                 targetColor = this.hex(this.settings.colorCurrent);
                 let isRead = false;
-                for (const rn of this.readNodes) { if (path.includes(rn)) { isRead = true; break; } }
+                for (const rn of this.readNodes) { if (this.nodeMatches(path, rn)) { isRead = true; break; } }
                 this.nodePipes.set(path, isRead ? "read" : "traverse");
             }
             if (targetColor == null) {
                 // Leídos (body en contexto) tienen prioridad sobre vistos (solo ficha)
                 let isRead = false;
-                for (const rn of this.readNodes) { if (path.includes(rn)) { isRead = true; break; } }
+                for (const rn of this.readNodes) { if (this.nodeMatches(path, rn)) { isRead = true; break; } }
                 if (isRead) {
                     targetColor = this.hex(this.settings.colorRead);
                     this.nodePipes.set(path, "read");
@@ -409,7 +420,7 @@ export class GraphAnimator {
             }
             if (targetColor == null) {
                 let visited = false;
-                for (const vn of this.visitedNodes) { if (path.includes(vn)) { visited = true; break; } }
+                for (const vn of this.visitedNodes) { if (this.nodeMatches(path, vn)) { visited = true; break; } }
                 if (visited) {
                     targetColor = this.hex(this.settings.colorVisited);
                     // Solo si no tenía pipe (result_nodes ya lo setearon con path completo)
@@ -430,9 +441,18 @@ export class GraphAnimator {
                 const newColor = { a: 1, rgb: targetColor };
                 if (!node.color || node.color.rgb !== targetColor) {
                     node.color = newColor;
-                    if (this.settings.pulseEnabled) {
-                        for (const key of this.pendingPulses) {
-                            if (path.includes(key)) { this.spawnPulse(r, node, targetColor); break; }
+                    for (const key of this.pendingPulses) {
+                        if (this.nodeMatches(path, key)) {
+                            const startAt = performance.now() + GraphAnimator.APPEARANCE_LEAD_MS;
+                            const pipe = (this.nodePipes.get(path) || "traverse") as PipeKey;
+                            if (this.replayActive && this.settings.replayBeeps) {
+                                const delay = Math.max(0, startAt - performance.now()) / 1000;
+                                this.beep(pipe, (this.audioCtx?.currentTime || 0) + delay);
+                            }
+                            if (this.settings.pulseEnabled) {
+                                this.spawnPulse(r, node, targetColor, false, startAt);
+                            }
+                            break;
                         }
                     }
                 }
@@ -455,7 +475,7 @@ export class GraphAnimator {
             if (existing) this.killPulse(this.pulses.indexOf(existing));
             return;
         }
-        const node = r?.nodes?.find((n: any) => (n.id || "").includes(this.currentNode as string));
+        const node = r?.nodes?.find((n: any) => this.nodeMatches(n.id || "", this.currentNode as string));
         if (!node) {
             if (existing) this.killPulse(this.pulses.indexOf(existing));
             return;
@@ -559,22 +579,22 @@ export class GraphAnimator {
     // círculo de un nodo — no hay global PIXI garantizado), redibujado por
     // frame para seguir al nodo mientras la simulación lo mueve.
 
-    private spawnPulse(r: any, node: any, rgb: number, beacon = false): void {
+    private spawnPulse(
+        r: any,
+        node: any,
+        rgb: number,
+        beacon = false,
+        startAt = performance.now(),
+    ): void {
         try {
             if (!r?.hanger) return;
-            // Sonido inmediato: sin delay, sin scheduling. El AudioContext se
-            // inicializa en replayPrompt() con el user gesture del click ▶.
-            if (this.replayActive && !beacon && this.settings.replayBeeps) {
-                const pipe = (this.nodePipes.get(node.id || "") || "traverse") as PipeKey;
-                this.beep(pipe);
-            }
             const GraphicsCtor = node.circle?.constructor || r.links?.[0]?.arrow?.constructor;
             if (!GraphicsCtor) return;
             const gfx: any = new GraphicsCtor();
             gfx.eventMode = "none";
             gfx.zIndex = 1.5; // sobre nodos (1), bajo labels (2) si algo re-sortea
             r.hanger.addChild(gfx);
-            this.pulses.push({ node, gfx, renderer: r, start: performance.now(), rgb, dur: this.settings.pulseDuration || 900, beacon });
+            this.pulses.push({ node, gfx, renderer: r, start: startAt, rgb, dur: this.settings.pulseDuration || 900, beacon });
             if (this.pulseRaf == null) this.tickPulses();
         } catch (_) { /* sin Graphics accesible, sin pulso */ }
     }
@@ -588,6 +608,10 @@ export class GraphAnimator {
                 try {
                     if (p.gfx.destroyed || !p.renderer?.hanger) {
                         this.killPulse(i);
+                        continue;
+                    }
+                    if (t < 0) {
+                        p.gfx.clear();
                         continue;
                     }
                     if (t >= 1) {
