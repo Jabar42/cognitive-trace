@@ -206,14 +206,14 @@ export class GraphAnimator {
                 const resPipe: PipeKey = (e.tool === "okf_traverse") ? "traverse" : "search";
                 for (const p of e.result_nodes) {
                     const isNew = !this.visitedNodes.has(p);
-                    // Durante replay, los result_nodes también generan pulso (y beep)
-                    if (isNew && this.replayActive) this.pendingPulses.add(p);
                     if (this.settings.revealStagger > 0) {
                         if (isNew && !this.revealQueue.includes(p)) {
                             this.revealQueue.push(p);
                         }
                     } else {
                         this.visitedNodes.add(p);
+                        // Sin cascada: pulso directo aquí (con cascada lo hace scheduleReveal)
+                        if (isNew && this.replayActive) this.pendingPulses.add(p);
                     }
                     const existing = this.nodePipes.get(p);
                     if (existing !== "read") this.nodePipes.set(p, resPipe);
@@ -234,6 +234,8 @@ export class GraphAnimator {
             const path = this.revealQueue.shift();
             if (path == null) return;
             this.visitedNodes.add(path);
+            // Cada nodo de la cascada genera su propio pulso (y beep durante replay)
+            if (this.replayActive) this.pendingPulses.add(path);
             this.patchAndRefresh();
             if (this.revealQueue.length) {
                 this.revealTimer = window.setTimeout(step, Math.max(16, this.settings.revealStagger));
