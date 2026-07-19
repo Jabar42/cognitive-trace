@@ -25,7 +25,7 @@ export class GraphAnimator {
     // Se marcan por cambio de estado lógico (no por transición de color) para que los
     // rebuilds de setData — que recrean nodos con color null — no re-disparen pulsos.
     private pendingPulses = new Set<string>();
-    private pulses: Array<{ node: any; gfx: any; renderer: any; start: number; rgb: number; dur: number; beacon: boolean }> = [];
+    private pulses: Array<{ node: any; gfx: any; renderer: any; start: number; rgb: number; dur: number; beacon: boolean; beeped: boolean }> = [];
     private pulseRaf: number | null = null;
     // Revelado en cascada de result_nodes (orden BFS del traverse → onda por profundidad)
     private revealQueue: string[] = [];
@@ -206,17 +206,14 @@ export class GraphAnimator {
                 const resPipe: PipeKey = (e.tool === "okf_traverse") ? "traverse" : "search";
                 for (const p of e.result_nodes) {
                     const isNew = !this.visitedNodes.has(p);
+                    // Durante replay, los result_nodes también generan pulso (y beep)
+                    if (isNew && this.replayActive) this.pendingPulses.add(p);
                     if (this.settings.revealStagger > 0) {
                         if (isNew && !this.revealQueue.includes(p)) {
                             this.revealQueue.push(p);
                         }
                     } else {
                         this.visitedNodes.add(p);
-                        // Beep por cada nodo agregado directamente (sin cascada) durante replay
-                        if (isNew && this.replayActive) {
-                            const rp = (this.nodePipes.get(p) || resPipe) as PipeKey;
-                            this.beep(rp);
-                        }
                     }
                     const existing = this.nodePipes.get(p);
                     if (existing !== "read") this.nodePipes.set(p, resPipe);
@@ -238,11 +235,6 @@ export class GraphAnimator {
             if (path == null) return;
             this.visitedNodes.add(path);
             this.patchAndRefresh();
-            // Beep por cada nodo revelado en cascada durante replay
-            if (this.replayActive) {
-                const p = (this.nodePipes.get(path) || "traverse") as PipeKey;
-                this.beep(p);
-            }
             if (this.revealQueue.length) {
                 this.revealTimer = window.setTimeout(step, Math.max(16, this.settings.revealStagger));
             }
@@ -533,17 +525,13 @@ export class GraphAnimator {
     private spawnPulse(r: any, node: any, rgb: number, beacon = false): void {
         try {
             if (!r?.hanger) return;
-            if (this.replayActive && !beacon) {
-                const pipe = (this.nodePipes.get(node.id || "") || "traverse") as PipeKey;
-                this.beep(pipe);
-            }
             const GraphicsCtor = node.circle?.constructor || r.links?.[0]?.arrow?.constructor;
             if (!GraphicsCtor) return;
             const gfx: any = new GraphicsCtor();
             gfx.eventMode = "none";
             gfx.zIndex = 1.5; // sobre nodos (1), bajo labels (2) si algo re-sortea
             r.hanger.addChild(gfx);
-            this.pulses.push({ node, gfx, renderer: r, start: performance.now(), rgb, dur: this.settings.pulseDuration || 900, beacon });
+            this.pulses.push({ node, gfx, renderer: r, start: performance.now(), rgb, dur: this.settings.pulseDuration || 900, beacon, beeped: false });
             if (this.pulseRaf == null) this.tickPulses();
         } catch (_) { /* sin Graphics accesible, sin pulso */ }
     }
@@ -561,8 +549,14 @@ export class GraphAnimator {
                     }
                     if (t >= 1) {
                         if (!p.beacon) { this.killPulse(i); continue; }
-                        if (t >= 1.35) { p.start = now; t = 0; }
+                        if (t >= 1.35) { p.start = now; t = 0; p.beeped = false; }
                         else { p.gfx.clear(); continue; }
+                    }
+                    // Beep en el primer frame visible del pulso (sincronizado con el dibujo)
+                    if (this.replayActive && !p.beacon && !p.beeped && t > 0.01) {
+                        p.beeped = true;
+                        const pipe = (this.nodePipes.get(p.node.id || "") || "traverse") as PipeKey;
+                        this.beep(pipe);
                     }
                     const worldR = p.node.getSize() * p.renderer.nodeScale;
                     const scale = p.renderer.scale || 1;
