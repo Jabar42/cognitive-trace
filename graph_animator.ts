@@ -561,18 +561,41 @@ export class GraphAnimator {
                     }
                     if (t >= 1) {
                         if (!p.beacon) { this.killPulse(i); continue; }
-                        // Beacon: pausa del 35% del ciclo entre ondas, luego reinicia
                         if (t >= 1.35) { p.start = now; t = 0; }
                         else { p.gfx.clear(); continue; }
                     }
-                    const ease = 1 - (1 - t) * (1 - t);
                     const worldR = p.node.getSize() * p.renderer.nodeScale;
-                    const lw = Math.max(1, 1.5 / (p.renderer.scale || 1));
+                    const scale = p.renderer.scale || 1;
+                    // Anillo principal: explota desde 0.6x hasta 3.2x el radio del nodo
+                    const ringEase = 1 - (1 - t) * (1 - t);
+                    const ringR = worldR * (0.6 + 2.6 * ringEase);
+                    const ringAlpha = 0.85 * (1 - t);
+                    const lw = Math.max(2.5, 4.0 / scale);
                     p.gfx.clear();
-                    p.gfx.lineStyle(lw, p.rgb, 0.55 * (1 - t));
-                    p.gfx.drawCircle(0, 0, worldR * (1.15 + 1.1 * ease));
+                    // Flash central: círculo sólido que aparece los primeros 180ms
+                    if (t < 0.3) {
+                        const flashAlpha = 0.3 * (1 - t / 0.3);
+                        const flashR = worldR * (0.5 + 0.5 * (t / 0.3));
+                        p.gfx.beginFill(p.rgb, flashAlpha);
+                        p.gfx.drawCircle(0, 0, flashR);
+                        p.gfx.endFill();
+                    }
+                    // Anillo de explosión
+                    p.gfx.lineStyle(lw, p.rgb, ringAlpha);
+                    p.gfx.drawCircle(0, 0, ringR);
+                    // Segundo anillo más fino y rápido (estela)
+                    const trailR = worldR * (0.4 + 3.0 * ringEase * ringEase);
+                    p.gfx.lineStyle(Math.max(1, 2.0 / scale), p.rgb, ringAlpha * 0.4);
+                    p.gfx.drawCircle(0, 0, trailR);
                     p.gfx.x = p.node.x;
                     p.gfx.y = p.node.y;
+                    // Scale bounce del nodo: +8% durante los primeros 250ms
+                    if (!p.beacon && p.node.circle && t < 0.4) {
+                        const bounce = 1 + 0.08 * (1 - t / 0.4) * Math.cos(t * Math.PI * 3);
+                        const s = p.node.getSize() / 100 * p.renderer.nodeScale;
+                        p.node.circle.scale.x = s * bounce;
+                        p.node.circle.scale.y = s * bounce;
+                    }
                 } catch (_) {
                     this.killPulse(i);
                 }
@@ -595,6 +618,14 @@ export class GraphAnimator {
 
     private killPulse(i: number): void {
         const p = this.pulses[i];
+        // Restaurar escala del nodo si el bounce la modificó
+        if (!p.beacon && p.node.circle) {
+            try {
+                const s = p.node.getSize() / 100 * p.renderer.nodeScale;
+                p.node.circle.scale.x = s;
+                p.node.circle.scale.y = s;
+            } catch (_) {}
+        }
         try { p.gfx.parent?.removeChild(p.gfx); p.gfx.destroy(); } catch (_) {}
         this.pulses.splice(i, 1);
     }
