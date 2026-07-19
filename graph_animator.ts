@@ -168,6 +168,7 @@ export class GraphAnimator {
         for (const path of connected) {
             if (!this.commandHighlights.has(path)) this.pendingPulses.add(path);
             this.commandHighlights.set(path, "#" + color.toString(16).padStart(6, "0"));
+            this.nodePipes.set(path, "commands");
         }
         this.focusTag = null; // one-shot
     }
@@ -225,7 +226,12 @@ export class GraphAnimator {
             let targetColor: number | null = null;
 
             for (const [cn, cc] of this.commandHighlights) {
-                if (path.includes(cn)) { targetColor = parseInt(cc.replace("#",""), 16); break; }
+                if (path.includes(cn)) {
+                    targetColor = parseInt(cc.replace("#",""), 16);
+                    // Guardar pipe con path completo (no el slug parcial)
+                    this.nodePipes.set(path, "commands");
+                    break;
+                }
             }
             if (targetColor == null && this.currentNode && path.includes(this.currentNode)) targetColor = this.hex(this.settings.colorCurrent);
             if (targetColor == null) {
