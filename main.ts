@@ -40,6 +40,10 @@ export default class CognitiveTracePlugin extends Plugin {
         // Inicializar componentes
         try {
             this.reader = new EventReader(vaultPath);
+            this.reader.onError((message) => {
+                console.warn(`[CognitiveTrace] ${message}`);
+                new Notice(`Cognitive Trace: ${message}`);
+            });
             this.animator = new GraphAnimator(this.app, this.settings);
             // Web Audio solo puede desbloquearse tras una interacción real del usuario.
             this.registerDomEvent(document, "pointerdown", () => {

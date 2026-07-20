@@ -66,4 +66,17 @@ describe("EventReader", () => {
 
         expect(reader.readAll(2).map((event) => event.tool)).toEqual(["okf_read", "okf_search"]);
     });
+
+    it("notifica líneas JSON malformadas sin notificar una línea parcial", () => {
+        const { reader, path } = makeReader("{malformed}\n");
+        const errors: string[] = [];
+        reader.onError((message) => errors.push(message));
+
+        expect(reader.readAll()).toEqual([]);
+        expect(errors).toEqual(["Ignored 1 malformed event-log line"]);
+
+        appendFileSync(path, "{partial");
+        (reader as any).poll();
+        expect(errors).toHaveLength(1);
+    });
 });

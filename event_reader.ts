@@ -20,6 +20,7 @@ export interface TraceEvent {
 }
 
 export type EventCallback = (events: TraceEvent[]) => void;
+export type ReaderErrorCallback = (message: string) => void;
 
 export class EventReader {
     private filePath: string;
@@ -27,6 +28,7 @@ export class EventReader {
     private partialLine = "";
     private watcher: fs.FSWatcher | null = null;
     private listeners: EventCallback[] = [];
+    private errorListeners: ReaderErrorCallback[] = [];
     private pollInterval: ReturnType<typeof setInterval> | null = null;
 
     constructor(vaultPath: string) {
@@ -42,6 +44,17 @@ export class EventReader {
         this.listeners.push(cb);
     }
 
+    onError(cb: ReaderErrorCallback): void {
+        this.errorListeners.push(cb);
+    }
+
+    private reportMalformedLines(count: number): void {
+        if (!count) return;
+        const suffix = count === 1 ? "line" : "lines";
+        const message = `Ignored ${count} malformed event-log ${suffix}`;
+        for (const cb of this.errorListeners) cb(message);
+    }
+
     /** Leer los últimos eventos históricos del JSONL (para carga inicial). */
     readAll(maxEvents = Infinity): TraceEvent[] {
         if (!fs.existsSync(this.filePath)) return [];
@@ -49,11 +62,13 @@ export class EventReader {
         this.lastSize = fs.statSync(this.filePath).size;
         const events: TraceEvent[] = [];
         const lines = content.split("\n");
+        let malformed = 0;
         for (let i = lines.length - 1; i >= 0 && events.length < maxEvents; i--) {
             const line = lines[i];
             if (!line.trim()) continue;
-            try { events.unshift(JSON.parse(line)); } catch { /* línea malformada */ }
+            try { events.unshift(JSON.parse(line)); } catch { malformed++; }
         }
+        this.reportMalformedLines(malformed);
         return events;
     }
 
@@ -100,15 +115,18 @@ export class EventReader {
         const lines = content.split("\n");
         this.partialLine = hasFinalNewline ? "" : (lines.pop() || "");
         const events: TraceEvent[] = [];
+        let malformed = 0;
 
         for (const line of lines) {
             if (!line.trim()) continue;
             try {
                 events.push(JSON.parse(line));
             } catch {
-                // línea malformada, ignorar
+                malformed++;
             }
         }
+
+        this.reportMalformedLines(malformed);
 
         if (events.length > 0) {
             for (const cb of this.listeners) cb(events);
