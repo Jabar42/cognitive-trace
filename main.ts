@@ -103,6 +103,8 @@ export default class CognitiveTracePlugin extends Plugin {
                     this.animator?.refresh();
                 }, (events: TraceEvent[]) => {
                     this.animator?.replayPrompt(events);
+                }, () => {
+                    this.animator?.stopReplay();
                 });
                 if (this.animator) this.animator.activePipes = view.activePipes;
                 return view;

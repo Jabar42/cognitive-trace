@@ -42,13 +42,17 @@ export class TimelineView extends ItemView {
     private replayCycles = 1; // cuántos prompts reproducir (1 = solo el clickeado)
     private onFilterChange: (() => void) | null = null;
     private onActivatePrompt: ((events: TraceEvent[]) => void) | null = null;
+    private onStopReplay: (() => void) | null = null;
+    private playingPrompt = -1;
+    private playbackTimeout: number | null = null;
 
-    constructor(leaf: WorkspaceLeaf, events: TraceEvent[], settings: CTSettings, onFilterChange?: () => void, onActivatePrompt?: (events: TraceEvent[]) => void) {
+    constructor(leaf: WorkspaceLeaf, events: TraceEvent[], settings: CTSettings, onFilterChange?: () => void, onActivatePrompt?: (events: TraceEvent[]) => void, onStopReplay?: () => void) {
         super(leaf);
         this.events = events;
         this.settings = settings;
         this.onFilterChange = onFilterChange || null;
         this.onActivatePrompt = onActivatePrompt || null;
+        this.onStopReplay = onStopReplay || null;
     }
 
     private pipes(): FilterPipe[] { return makePipes(this.settings); }
@@ -206,19 +210,32 @@ export class TimelineView extends ItemView {
 
             // Botón para activar este prompt en el grafo
             if (this.onActivatePrompt) {
-                const activateBtn = header.createEl("button", { cls: "trace-prompt-activate", text: "▶" });
-                const title = this.replayCycles === 1
+                const isPlaying = this.playingPrompt === pi;
+                const activateBtn = header.createEl("button", {
+                    cls: "trace-prompt-activate" + (isPlaying ? " trace-prompt-playing" : ""),
+                    text: isPlaying ? "■" : "▶",
+                });
+                const title = isPlaying ? "Detener reproducción" : this.replayCycles === 1
                     ? "Reproducir este prompt en el grafo (animado)"
                     : `Reproducir ${this.replayCycles} prompts en el grafo (animado)`;
                 activateBtn.title = title;
+                activateBtn.setAttribute("aria-label", title);
                 activateBtn.addEventListener("click", (ev) => {
                     ev.stopPropagation();
+                    if (this.playingPrompt === pi) {
+                        this.stopPlayback();
+                        return;
+                    }
+                    this.stopPlayback();
+                    this.playingPrompt = pi;
                     list.querySelectorAll(".trace-prompt-activate").forEach((b) => {
                         (b as HTMLElement).classList.remove("trace-prompt-playing");
                         (b as HTMLElement).setText("▶");
                     });
                     activateBtn.classList.add("trace-prompt-playing");
-                    activateBtn.setText("⏸");
+                    activateBtn.setText("■");
+                    activateBtn.title = "Detener reproducción";
+                    activateBtn.setAttribute("aria-label", "Detener reproducción");
                     // Recolectar eventos de este prompt + N-1 anteriores
                     const allEvents: TraceEvent[] = [];
                     for (let j = 0; j < this.replayCycles && (pi + j) < prompts.length; j++) {
@@ -227,10 +244,7 @@ export class TimelineView extends ItemView {
                     this.onActivatePrompt!(allEvents);
                     const totalEvents = allEvents.length;
                     const estDuration = totalEvents * 500 + 2000;
-                    window.setTimeout(() => {
-                        activateBtn.classList.remove("trace-prompt-playing");
-                        activateBtn.setText("▶");
-                    }, estDuration);
+                    this.playbackTimeout = window.setTimeout(() => this.stopPlayback(), estDuration);
                 });
             }
 
@@ -284,5 +298,24 @@ export class TimelineView extends ItemView {
         }
     }
 
-    async onClose(): Promise<void> {}
+    async onClose(): Promise<void> {
+        this.stopPlayback();
+    }
+
+    private stopPlayback(): void {
+        if (this.playbackTimeout != null) {
+            window.clearTimeout(this.playbackTimeout);
+            this.playbackTimeout = null;
+        }
+        if (this.playingPrompt < 0) return;
+        this.onStopReplay?.();
+        this.playingPrompt = -1;
+        this.containerEl.querySelectorAll(".trace-prompt-activate").forEach((button) => {
+            const el = button as HTMLElement;
+            el.classList.remove("trace-prompt-playing");
+            el.setText("▶");
+            el.title = "Reproducir este prompt en el grafo (animado)";
+            el.setAttribute("aria-label", el.title);
+        });
+    }
 }

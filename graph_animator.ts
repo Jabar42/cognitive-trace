@@ -100,6 +100,7 @@ export class GraphAnimator {
 
     private audioCtx: AudioContext | null = null;
     private replayActive = false;
+    private replayGeneration = 0;
     // Un pequeño margen permite programar el audio y dejar que el siguiente
     // frame visual comience en el mismo instante perceptual.
     private static readonly APPEARANCE_LEAD_MS = 40;
@@ -159,9 +160,26 @@ export class GraphAnimator {
     /** Replay animado de un prompt: limpia el estado y reproduce evento por evento. */
     private replayTimer: number | null = null;
 
+    /** Detener el replay sin borrar lo que ya se ha revelado en el grafo. */
+    stopReplay(): void {
+        this.replayGeneration++;
+        if (this.replayTimer != null) {
+            window.clearTimeout(this.replayTimer);
+            this.replayTimer = null;
+        }
+        if (this.revealTimer != null) {
+            window.clearTimeout(this.revealTimer);
+            this.revealTimer = null;
+        }
+        this.revealQueue = [];
+        this.queuedCommands.clear();
+        this.replayActive = false;
+    }
+
     async replayPrompt(events: TraceEvent[]): Promise<void> {
         // Cancelar replay anterior
-        if (this.replayTimer != null) { window.clearTimeout(this.replayTimer); this.replayTimer = null; }
+        this.stopReplay();
+        const generation = this.replayGeneration;
         // Limpiar estado
         this.visitedNodes.clear();
         this.readNodes.clear();
@@ -174,19 +192,20 @@ export class GraphAnimator {
         this.revealQueue = [];
         this.queuedCommands.clear();
         this.focusTag = null;
-        if (this.revealTimer != null) { window.clearTimeout(this.revealTimer); this.revealTimer = null; }
         this.currentNode = null;
         this.patchAndRefresh();
         // Inicializar AudioContext con user gesture (click ▶) — garantiza running
         if (this.settings.replayBeeps) {
             await this.unlockAudio();
         }
+        if (generation !== this.replayGeneration) return;
         this.replayActive = true;
 
         if (!events.length) { this.replayActive = false; return; }
         const DELAY = 450;
         let i = 0;
         const scheduleNext = () => {
+            if (generation !== this.replayGeneration) return;
             if (i >= events.length) { this.replayTimer = null; this.replayActive = false; return; }
             const batch: TraceEvent[] = [events[i]];
             const baseTs = new Date(events[i].ts).getTime();

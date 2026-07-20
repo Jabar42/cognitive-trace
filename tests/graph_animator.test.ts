@@ -210,6 +210,26 @@ describe("GraphAnimator replay audio sync", () => {
         expect((animator as any).pulses).toHaveLength(1);
     });
 
+    it("detiene los siguientes lotes de un replay", async () => {
+        const renderer = makeRenderer(["Notes/alpha.md", "Notes/beta.md"]);
+        const app = { workspace: { on: vi.fn(), getLeavesOfType: vi.fn(() => [{ view: { renderer } }]) } } as any;
+        const animator = new GraphAnimator(app, { ...DEFAULT_SETTINGS, revealStagger: 0, replayBeeps: false });
+        const replay = animator.replayPrompt([
+            makeEvent(["Notes/alpha.md"]),
+            { ...makeEvent(["Notes/beta.md"]), ts: "2026-07-19T04:00:03.000Z" },
+        ]);
+        await replay;
+
+        expect(renderer.nodes[0].color).not.toBeNull();
+        expect(renderer.nodes[1].color).toBeNull();
+
+        animator.stopReplay();
+        vi.advanceTimersByTime(1000);
+
+        expect(renderer.nodes[1].color).toBeNull();
+        expect((animator as any).replayActive).toBe(false);
+    });
+
     it("limpia el grafo al cruzar 60s y conserva solo el último conjunto", () => {
         const renderer = makeRenderer(["Notes/old.md", "Notes/new.md"]);
         const app = { workspace: { on: vi.fn(), getLeavesOfType: vi.fn(() => [{ view: { renderer } }]) } } as any;
