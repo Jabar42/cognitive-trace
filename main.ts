@@ -160,6 +160,7 @@ export default class CognitiveTracePlugin extends Plugin {
     async onunload(): Promise<void> {
         console.log("[CognitiveTrace] Unloading plugin");
         this.reader?.stop();
+        this.animator?.destroy();
         this.animator?.reset();
         this.app.workspace.detachLeavesOfType(TIMELINE_VIEW_TYPE);
     }

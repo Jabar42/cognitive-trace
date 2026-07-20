@@ -1,7 +1,7 @@
 // graph_animator.ts — node.color en formato nativo {a, rgb}
 // El renderer dibuja cada círculo blanco (radio 100) y lo colorea vía tint desde getFillColor().
 // Un int crudo en node.color produce alpha NaN (u.a === undefined) y el nodo se vuelve invisible.
-import { App } from "obsidian";
+import { App, EventRef } from "obsidian";
 import { TraceEvent } from "./event_reader";
 import { CTSettings } from "./settings";
 
@@ -34,13 +34,21 @@ export class GraphAnimator {
     // Revelado en cascada de result_nodes (orden BFS del traverse → onda por profundidad)
     private revealQueue: string[] = [];
     private revealTimer: number | null = null;
+    private layoutEventRef: EventRef | null = null;
 
     constructor(app: App, settings: CTSettings) {
         this.app = app;
         this.settings = settings;
-        this.app.workspace.on("layout-change", () => {
+        this.layoutEventRef = this.app.workspace.on("layout-change", () => {
             if (this.enabled) this.patchAndRefresh();
         });
+    }
+
+    destroy(): void {
+        if (this.layoutEventRef) {
+            this.app.workspace.offref(this.layoutEventRef);
+            this.layoutEventRef = null;
+        }
     }
 
     toggle(): void { this.enabled = !this.enabled; if (!this.enabled) this.reset(); }

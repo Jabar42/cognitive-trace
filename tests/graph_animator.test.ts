@@ -144,6 +144,23 @@ describe("GraphAnimator replay audio sync", () => {
         expect((animator as any).pulses[0].start).toBe(1040);
     });
 
+    it("libera el listener de layout al destruirse", () => {
+        const eventRef = {};
+        const offref = vi.fn();
+        const app = {
+            workspace: {
+                on: vi.fn(() => eventRef),
+                offref,
+                getLeavesOfType: vi.fn(() => []),
+            },
+        } as any;
+        const animator = new GraphAnimator(app, { ...DEFAULT_SETTINGS });
+
+        animator.destroy();
+
+        expect(offref).toHaveBeenCalledWith(eventRef);
+    });
+
     it("emite exactamente un beep por cada nodo revelado", async () => {
         const renderer = makeRenderer(["Notes/alpha.md", "Notes/beta.md"]);
         const app = { workspace: { on: vi.fn(), getLeavesOfType: vi.fn(() => [{ view: { renderer } }]) } } as any;
