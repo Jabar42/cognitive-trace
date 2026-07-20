@@ -101,6 +101,7 @@ export class GraphAnimator {
     private audioCtx: AudioContext | null = null;
     private replayActive = false;
     private replayGeneration = 0;
+    private replayDone: (() => void) | null = null;
     // Un pequeño margen permite programar el audio y dejar que el siguiente
     // frame visual comience en el mismo instante perceptual.
     private static readonly APPEARANCE_LEAD_MS = 40;
@@ -174,12 +175,20 @@ export class GraphAnimator {
         this.revealQueue = [];
         this.queuedCommands.clear();
         this.replayActive = false;
+        this.finishReplay();
     }
 
-    async replayPrompt(events: TraceEvent[]): Promise<void> {
+    private finishReplay(): void {
+        const done = this.replayDone;
+        this.replayDone = null;
+        done?.();
+    }
+
+    async replayPrompt(events: TraceEvent[], onDone?: () => void): Promise<void> {
         // Cancelar replay anterior
         this.stopReplay();
         const generation = this.replayGeneration;
+        this.replayDone = onDone || null;
         // Limpiar estado
         this.visitedNodes.clear();
         this.readNodes.clear();
@@ -201,12 +210,17 @@ export class GraphAnimator {
         if (generation !== this.replayGeneration) return;
         this.replayActive = true;
 
-        if (!events.length) { this.replayActive = false; return; }
+        if (!events.length) { this.replayActive = false; this.finishReplay(); return; }
         const DELAY = 450;
         let i = 0;
         const scheduleNext = () => {
             if (generation !== this.replayGeneration) return;
-            if (i >= events.length) { this.replayTimer = null; this.replayActive = false; return; }
+            if (i >= events.length) {
+                this.replayTimer = null;
+                this.replayActive = false;
+                this.finishReplay();
+                return;
+            }
             const batch: TraceEvent[] = [events[i]];
             const baseTs = new Date(events[i].ts).getTime();
             i++;

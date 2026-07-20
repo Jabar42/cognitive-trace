@@ -41,12 +41,11 @@ export class TimelineView extends ItemView {
     activePipes = new Set<string>(["traverse", "read", "search", "create", "commands"]);
     private replayCycles = 1; // cuántos prompts reproducir (1 = solo el clickeado)
     private onFilterChange: (() => void) | null = null;
-    private onActivatePrompt: ((events: TraceEvent[]) => void) | null = null;
+    private onActivatePrompt: ((events: TraceEvent[], onDone: () => void) => void) | null = null;
     private onStopReplay: (() => void) | null = null;
     private playingPrompt = -1;
-    private playbackTimeout: number | null = null;
 
-    constructor(leaf: WorkspaceLeaf, events: TraceEvent[], settings: CTSettings, onFilterChange?: () => void, onActivatePrompt?: (events: TraceEvent[]) => void, onStopReplay?: () => void) {
+    constructor(leaf: WorkspaceLeaf, events: TraceEvent[], settings: CTSettings, onFilterChange?: () => void, onActivatePrompt?: (events: TraceEvent[], onDone: () => void) => void, onStopReplay?: () => void) {
         super(leaf);
         this.events = events;
         this.settings = settings;
@@ -241,10 +240,7 @@ export class TimelineView extends ItemView {
                     for (let j = 0; j < this.replayCycles && (pi + j) < prompts.length; j++) {
                         allEvents.push(...prompts[pi + j].events);
                     }
-                    this.onActivatePrompt!(allEvents);
-                    const totalEvents = allEvents.length;
-                    const estDuration = totalEvents * 500 + 2000;
-                    this.playbackTimeout = window.setTimeout(() => this.stopPlayback(), estDuration);
+                    this.onActivatePrompt!(allEvents, () => this.completePlayback());
                 });
             }
 
@@ -303,12 +299,13 @@ export class TimelineView extends ItemView {
     }
 
     private stopPlayback(): void {
-        if (this.playbackTimeout != null) {
-            window.clearTimeout(this.playbackTimeout);
-            this.playbackTimeout = null;
-        }
         if (this.playingPrompt < 0) return;
         this.onStopReplay?.();
+        this.completePlayback();
+    }
+
+    private completePlayback(): void {
+        if (this.playingPrompt < 0) return;
         this.playingPrompt = -1;
         this.containerEl.querySelectorAll(".trace-prompt-activate").forEach((button) => {
             const el = button as HTMLElement;

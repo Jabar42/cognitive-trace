@@ -101,8 +101,8 @@ export default class CognitiveTracePlugin extends Plugin {
             (leaf) => {
                 const view = new TimelineView(leaf, this.eventsBuffer, this.settings, () => {
                     this.animator?.refresh();
-                }, (events: TraceEvent[]) => {
-                    this.animator?.replayPrompt(events);
+                }, (events: TraceEvent[], onDone: () => void) => {
+                    this.animator?.replayPrompt(events, onDone);
                 }, () => {
                     this.animator?.stopReplay();
                 });
