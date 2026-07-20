@@ -330,6 +330,18 @@
     animation: prompt-pulse 1.2s ease-in-out infinite;
 }
 
+.trace-prompt-stop-hidden,
+.trace-prompt-progress-hidden {
+    display: none;
+}
+
+.trace-prompt-progress {
+    font-size: 9px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
 @keyframes prompt-pulse {
     0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--text-accent) 30%, transparent); }
     50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--text-accent) 0%, transparent); }

@@ -57,4 +57,13 @@ describe("EventReader", () => {
         expect(received).toHaveLength(1);
         expect(received[0].tool).toBe("okf_new");
     });
+
+    it("puede cargar solo los eventos históricos más recientes", () => {
+        const initial = ["okf_traverse", "okf_read", "okf_search"]
+            .map(makeEvent)
+            .join("\n") + "\n";
+        const { reader } = makeReader(initial);
+
+        expect(reader.readAll(2).map((event) => event.tool)).toEqual(["okf_read", "okf_search"]);
+    });
 });

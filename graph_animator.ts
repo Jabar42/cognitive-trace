@@ -35,6 +35,8 @@ export class GraphAnimator {
     private revealQueue: string[] = [];
     private revealTimer: number | null = null;
     private layoutEventRef: EventRef | null = null;
+    private replayStep: (() => void) | null = null;
+    private replayPaused = false;
 
     constructor(app: App, settings: CTSettings) {
         this.app = app;
@@ -183,7 +185,32 @@ export class GraphAnimator {
         this.revealQueue = [];
         this.queuedCommands.clear();
         this.replayActive = false;
+        this.replayPaused = false;
+        this.replayStep = null;
         this.finishReplay();
+    }
+
+    toggleReplayPause(): void {
+        // replayDone también cubre la ventana en la que AudioContext todavía
+        // está esperando el gesto del usuario y replayActive aún es false.
+        if (!this.replayActive && !this.replayDone) return;
+        if (this.replayPaused) {
+            this.replayPaused = false;
+            if (this.replayActive) {
+                this.replayTimer = window.setTimeout(() => this.replayStep?.(), 0);
+            }
+            if (this.revealQueue.length) this.scheduleReveal();
+        } else {
+            this.replayPaused = true;
+            if (this.replayTimer != null) {
+                window.clearTimeout(this.replayTimer);
+                this.replayTimer = null;
+            }
+            if (this.revealTimer != null) {
+                window.clearTimeout(this.revealTimer);
+                this.revealTimer = null;
+            }
+        }
     }
 
     private finishReplay(): void {
@@ -192,7 +219,7 @@ export class GraphAnimator {
         done?.();
     }
 
-    async replayPrompt(events: TraceEvent[], onDone?: () => void): Promise<void> {
+    async replayPrompt(events: TraceEvent[], onDone?: () => void, onProgress?: (current: number, total: number) => void): Promise<void> {
         // Cancelar replay anterior
         this.stopReplay();
         const generation = this.replayGeneration;
@@ -223,9 +250,11 @@ export class GraphAnimator {
         let i = 0;
         const scheduleNext = () => {
             if (generation !== this.replayGeneration) return;
+            if (this.replayPaused) return;
             if (i >= events.length) {
                 this.replayTimer = null;
                 this.replayActive = false;
+                this.replayStep = null;
                 this.finishReplay();
                 return;
             }
@@ -238,8 +267,10 @@ export class GraphAnimator {
                 else break;
             }
             this.processEvents(batch);
+            onProgress?.(i, events.length);
             this.replayTimer = window.setTimeout(scheduleNext, DELAY);
         };
+        this.replayStep = scheduleNext;
         // Primer batch inmediato — sin delay inicial
         scheduleNext();
     }
@@ -333,9 +364,10 @@ export class GraphAnimator {
     // Revela el próximo nodo de la cola y re-agenda hasta vaciarla. setTimeout
     // encadenado (no interval) para que cambios de revealStagger apliquen en vivo.
     private scheduleReveal(): void {
-        if (this.revealTimer != null) return;
+        if (this.replayPaused || this.revealTimer != null) return;
         const step = () => {
             this.revealTimer = null;
+            if (this.replayPaused) return;
             const path = this.revealQueue.shift();
             if (path == null) return;
             // ¿Es un comando encolado?

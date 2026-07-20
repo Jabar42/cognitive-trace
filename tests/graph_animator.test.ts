@@ -261,6 +261,43 @@ describe("GraphAnimator replay audio sync", () => {
         expect(onDone).toHaveBeenCalledOnce();
     });
 
+    it("pausa y reanuda los siguientes lotes del replay", async () => {
+        const renderer = makeRenderer(["Notes/alpha.md", "Notes/beta.md"]);
+        const app = { workspace: { on: vi.fn(), getLeavesOfType: vi.fn(() => [{ view: { renderer } }]) } } as any;
+        const animator = new GraphAnimator(app, { ...DEFAULT_SETTINGS, revealStagger: 0, replayBeeps: false });
+
+        await animator.replayPrompt([
+            makeEvent(["Notes/alpha.md"]),
+            { ...makeEvent(["Notes/beta.md"]), ts: "2026-07-19T04:00:03.000Z" },
+        ]);
+        animator.toggleReplayPause();
+        vi.advanceTimersByTime(1000);
+        expect(renderer.nodes[1].color).toBeNull();
+
+        animator.toggleReplayPause();
+        vi.advanceTimersByTime(0);
+        expect(renderer.nodes[1].color).not.toBeNull();
+    });
+
+    it("pausa también la cascada de revelado", async () => {
+        const renderer = makeRenderer(["Notes/alpha.md", "Notes/beta.md"]);
+        const app = { workspace: { on: vi.fn(), getLeavesOfType: vi.fn(() => [{ view: { renderer } }]) } } as any;
+        const animator = new GraphAnimator(app, { ...DEFAULT_SETTINGS, revealStagger: 100, replayBeeps: false });
+
+        await animator.replayPrompt([makeEvent(["Notes/alpha.md", "Notes/beta.md"]) ]);
+        animator.toggleReplayPause();
+        vi.advanceTimersByTime(1000);
+        expect(renderer.nodes[0].color).toBeNull();
+        expect(renderer.nodes[1].color).toBeNull();
+
+        animator.toggleReplayPause();
+        vi.advanceTimersByTime(100);
+        expect(renderer.nodes[0].color).not.toBeNull();
+        expect(renderer.nodes[1].color).toBeNull();
+        vi.advanceTimersByTime(100);
+        expect(renderer.nodes[1].color).not.toBeNull();
+    });
+
     it("limpia el grafo al cruzar 60s y conserva solo el último conjunto", () => {
         const renderer = makeRenderer(["Notes/old.md", "Notes/new.md"]);
         const app = { workspace: { on: vi.fn(), getLeavesOfType: vi.fn(() => [{ view: { renderer } }]) } } as any;

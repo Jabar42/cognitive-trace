@@ -41,17 +41,22 @@ export class TimelineView extends ItemView {
     activePipes = new Set<string>(["traverse", "read", "search", "create", "commands"]);
     private replayCycles = 1; // cuántos prompts reproducir (1 = solo el clickeado)
     private onFilterChange: (() => void) | null = null;
-    private onActivatePrompt: ((events: TraceEvent[], onDone: () => void) => void) | null = null;
+    private onActivatePrompt: ((events: TraceEvent[], onDone: () => void, onProgress: (current: number, total: number) => void) => void) | null = null;
     private onStopReplay: (() => void) | null = null;
+    private onToggleReplayPause: (() => void) | null = null;
     private playingPrompt = -1;
+    private replayPaused = false;
+    private playbackProgress = "";
+    private refreshTimer: number | null = null;
 
-    constructor(leaf: WorkspaceLeaf, events: TraceEvent[], settings: CTSettings, onFilterChange?: () => void, onActivatePrompt?: (events: TraceEvent[], onDone: () => void) => void, onStopReplay?: () => void) {
+    constructor(leaf: WorkspaceLeaf, events: TraceEvent[], settings: CTSettings, onFilterChange?: () => void, onActivatePrompt?: (events: TraceEvent[], onDone: () => void, onProgress: (current: number, total: number) => void) => void, onStopReplay?: () => void, onToggleReplayPause?: () => void) {
         super(leaf);
         this.events = events;
         this.settings = settings;
         this.onFilterChange = onFilterChange || null;
         this.onActivatePrompt = onActivatePrompt || null;
         this.onStopReplay = onStopReplay || null;
+        this.onToggleReplayPause = onToggleReplayPause || null;
     }
 
     private pipes(): FilterPipe[] { return makePipes(this.settings); }
@@ -62,7 +67,15 @@ export class TimelineView extends ItemView {
 
     async onOpen(): Promise<void> { this.render(); }
 
-    refresh(_events: TraceEvent[]): void { this.render(); }
+    refresh(_events: TraceEvent[]): void {
+        // Agrupar tandas cercanas evita reconstruir hasta 200 filas por cada
+        // evento cuando el lector recibe actividad continua.
+        if (this.refreshTimer != null) return;
+        this.refreshTimer = window.setTimeout(() => {
+            this.refreshTimer = null;
+            this.render();
+        }, 100);
+    }
 
     private render(): void {
         const container = this.containerEl.children[1] as HTMLElement;
@@ -210,37 +223,60 @@ export class TimelineView extends ItemView {
             // Botón para activar este prompt en el grafo
             if (this.onActivatePrompt) {
                 const isPlaying = this.playingPrompt === pi;
-                const activateBtn = header.createEl("button", {
-                    cls: "trace-prompt-activate" + (isPlaying ? " trace-prompt-playing" : ""),
-                    text: isPlaying ? "■" : "▶",
+                const pauseBtn = header.createEl("button", {
+                    cls: "trace-prompt-activate trace-prompt-play" + (isPlaying ? " trace-prompt-playing" : ""),
+                    text: isPlaying ? (this.replayPaused ? "▶" : "⏸") : "▶",
                 });
-                const title = isPlaying ? "Detener reproducción" : this.replayCycles === 1
+                const title = isPlaying ? (this.replayPaused ? "Reanudar reproducción" : "Pausar reproducción") : this.replayCycles === 1
                     ? "Reproducir este prompt en el grafo (animado)"
                     : `Reproducir ${this.replayCycles} prompts en el grafo (animado)`;
-                activateBtn.title = title;
-                activateBtn.setAttribute("aria-label", title);
-                activateBtn.addEventListener("click", (ev) => {
+                pauseBtn.title = title;
+                pauseBtn.setAttribute("aria-label", title);
+
+                const stopBtn = header.createEl("button", {
+                    cls: "trace-prompt-activate trace-prompt-stop" + (isPlaying ? "" : " trace-prompt-stop-hidden"),
+                    text: "■",
+                });
+                stopBtn.title = "Detener reproducción";
+                stopBtn.setAttribute("aria-label", "Detener reproducción");
+
+                const progress = header.createEl("span", {
+                    cls: "trace-prompt-progress" + (isPlaying ? "" : " trace-prompt-progress-hidden"),
+                    text: isPlaying ? this.playbackProgress : "",
+                });
+                progress.title = "Progreso del replay";
+
+                pauseBtn.addEventListener("click", (ev) => {
                     ev.stopPropagation();
                     if (this.playingPrompt === pi) {
-                        this.stopPlayback();
+                        this.togglePausePlayback();
                         return;
                     }
                     this.stopPlayback();
                     this.playingPrompt = pi;
-                    list.querySelectorAll(".trace-prompt-activate").forEach((b) => {
-                        (b as HTMLElement).classList.remove("trace-prompt-playing");
-                        (b as HTMLElement).setText("▶");
-                    });
-                    activateBtn.classList.add("trace-prompt-playing");
-                    activateBtn.setText("■");
-                    activateBtn.title = "Detener reproducción";
-                    activateBtn.setAttribute("aria-label", "Detener reproducción");
                     // Recolectar eventos de este prompt + N-1 anteriores
                     const allEvents: TraceEvent[] = [];
                     for (let j = 0; j < this.replayCycles && (pi + j) < prompts.length; j++) {
                         allEvents.push(...prompts[pi + j].events);
                     }
-                    this.onActivatePrompt!(allEvents, () => this.completePlayback());
+                    this.replayPaused = false;
+                    this.playbackProgress = `0/${allEvents.length}`;
+                    pauseBtn.classList.add("trace-prompt-playing");
+                    pauseBtn.setText("⏸");
+                    pauseBtn.title = "Pausar reproducción";
+                    pauseBtn.setAttribute("aria-label", "Pausar reproducción");
+                    stopBtn.classList.remove("trace-prompt-stop-hidden");
+                    progress.classList.remove("trace-prompt-progress-hidden");
+                    progress.setText(this.playbackProgress);
+                    this.onActivatePrompt!(allEvents, () => this.completePlayback(), (current, total) => {
+                        this.playbackProgress = `${current}/${total}`;
+                        this.containerEl.querySelector(".trace-prompt-progress")?.setText(this.playbackProgress);
+                    });
+                });
+
+                stopBtn.addEventListener("click", (ev) => {
+                    ev.stopPropagation();
+                    if (this.playingPrompt === pi) this.stopPlayback();
                 });
             }
 
@@ -295,6 +331,10 @@ export class TimelineView extends ItemView {
     }
 
     async onClose(): Promise<void> {
+        if (this.refreshTimer != null) {
+            window.clearTimeout(this.refreshTimer);
+            this.refreshTimer = null;
+        }
         this.stopPlayback();
     }
 
@@ -304,15 +344,36 @@ export class TimelineView extends ItemView {
         this.completePlayback();
     }
 
+    private togglePausePlayback(): void {
+        if (this.playingPrompt < 0) return;
+        this.onToggleReplayPause?.();
+        this.replayPaused = !this.replayPaused;
+        this.containerEl.querySelectorAll(".trace-prompt-play").forEach((button) => {
+            const el = button as HTMLElement;
+            el.setText(this.replayPaused ? "▶" : "⏸");
+            el.title = this.replayPaused ? "Reanudar reproducción" : "Pausar reproducción";
+            el.setAttribute("aria-label", el.title);
+        });
+    }
+
     private completePlayback(): void {
         if (this.playingPrompt < 0) return;
         this.playingPrompt = -1;
-        this.containerEl.querySelectorAll(".trace-prompt-activate").forEach((button) => {
+        this.replayPaused = false;
+        this.playbackProgress = "";
+        this.containerEl.querySelectorAll(".trace-prompt-play").forEach((button) => {
             const el = button as HTMLElement;
             el.classList.remove("trace-prompt-playing");
             el.setText("▶");
             el.title = "Reproducir este prompt en el grafo (animado)";
             el.setAttribute("aria-label", el.title);
+        });
+        this.containerEl.querySelectorAll(".trace-prompt-stop").forEach((button) => {
+            (button as HTMLElement).classList.add("trace-prompt-stop-hidden");
+        });
+        this.containerEl.querySelectorAll(".trace-prompt-progress").forEach((progress) => {
+            progress.classList.add("trace-prompt-progress-hidden");
+            progress.setText("");
         });
     }
 }

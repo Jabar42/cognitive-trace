@@ -42,15 +42,17 @@ export class EventReader {
         this.listeners.push(cb);
     }
 
-    /** Leer TODOS los eventos históricos del JSONL (para carga inicial). */
-    readAll(): TraceEvent[] {
+    /** Leer los últimos eventos históricos del JSONL (para carga inicial). */
+    readAll(maxEvents = Infinity): TraceEvent[] {
         if (!fs.existsSync(this.filePath)) return [];
         const content = fs.readFileSync(this.filePath, "utf-8");
         this.lastSize = fs.statSync(this.filePath).size;
         const events: TraceEvent[] = [];
-        for (const line of content.split("\n")) {
+        const lines = content.split("\n");
+        for (let i = lines.length - 1; i >= 0 && events.length < maxEvents; i--) {
+            const line = lines[i];
             if (!line.trim()) continue;
-            try { events.push(JSON.parse(line)); } catch { /* línea malformada */ }
+            try { events.unshift(JSON.parse(line)); } catch { /* línea malformada */ }
         }
         return events;
     }

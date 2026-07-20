@@ -5,6 +5,8 @@ import { GraphAnimator } from "./graph_animator";
 import { TimelineView, TIMELINE_VIEW_TYPE } from "./timeline_view";
 import { CTSettings, DEFAULT_SETTINGS, CTSettingTab } from "./settings";
 
+const MAX_BUFFER_EVENTS = 500;
+
 export default class CognitiveTracePlugin extends Plugin {
     private reader: EventReader | null = null;
     private animator: GraphAnimator | null = null;
@@ -55,8 +57,8 @@ export default class CognitiveTracePlugin extends Plugin {
             // Buffer compartido: guardar siempre
             this.eventsBuffer.push(...events);
             // Mantener máximo 500 eventos en buffer
-            if (this.eventsBuffer.length > 500) {
-                this.eventsBuffer = this.eventsBuffer.slice(-500);
+            if (this.eventsBuffer.length > MAX_BUFFER_EVENTS) {
+                this.eventsBuffer = this.eventsBuffer.slice(-MAX_BUFFER_EVENTS);
             }
             try {
                 this.animator?.processEvents(events);
@@ -78,10 +80,13 @@ export default class CognitiveTracePlugin extends Plugin {
 
         // Cargar historial completo desde JSONL (sin esperar nuevos eventos)
         try {
-            const history = this.reader.readAll();
-            console.log(`[CognitiveTrace] Cargando ${history.length} eventos históricos...`);
+            const history = this.reader.readAll(MAX_BUFFER_EVENTS);
+            console.log(`[CognitiveTrace] Cargando ${history.length} eventos históricos recientes...`);
             // Poblar el buffer compartido para que el timeline tenga datos
             this.eventsBuffer.push(...history);
+            if (this.eventsBuffer.length > MAX_BUFFER_EVENTS) {
+                this.eventsBuffer = this.eventsBuffer.slice(-MAX_BUFFER_EVENTS);
+            }
             this.animator?.loadHistory(history);
             console.log("[CognitiveTrace] Historial cargado — grafo + buffer poblados.");
             // Si el timeline ya está abierto (restaurado por Obsidian), refrescarlo
@@ -101,10 +106,12 @@ export default class CognitiveTracePlugin extends Plugin {
             (leaf) => {
                 const view = new TimelineView(leaf, this.eventsBuffer, this.settings, () => {
                     this.animator?.refresh();
-                }, (events: TraceEvent[], onDone: () => void) => {
-                    this.animator?.replayPrompt(events, onDone);
+                }, (events: TraceEvent[], onDone: () => void, onProgress: (current: number, total: number) => void) => {
+                    this.animator?.replayPrompt(events, onDone, onProgress);
                 }, () => {
                     this.animator?.stopReplay();
+                }, () => {
+                    this.animator?.toggleReplayPause();
                 });
                 if (this.animator) this.animator.activePipes = view.activePipes;
                 return view;
