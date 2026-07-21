@@ -60,10 +60,10 @@ export default class CognitiveTracePlugin extends Plugin {
             console.log(`[CognitiveTrace] Received ${events.length} events`);
             // Buffer compartido: guardar siempre
             this.eventsBuffer.push(...events);
-            // Mantener máximo 500 eventos en buffer
-            if (this.eventsBuffer.length > MAX_BUFFER_EVENTS) {
-                this.eventsBuffer = this.eventsBuffer.slice(-MAX_BUFFER_EVENTS);
-            }
+            // Mantener máximo 500 eventos en buffer (splice in-place: no rompe
+            // la referencia compartida con TimelineView)
+            const excess = this.eventsBuffer.length - MAX_BUFFER_EVENTS;
+            if (excess > 0) this.eventsBuffer.splice(0, excess);
             try {
                 this.animator?.processEvents(events);
             } catch (e) {
@@ -88,9 +88,9 @@ export default class CognitiveTracePlugin extends Plugin {
             console.log(`[CognitiveTrace] Cargando ${history.length} eventos históricos recientes...`);
             // Poblar el buffer compartido para que el timeline tenga datos
             this.eventsBuffer.push(...history);
-            if (this.eventsBuffer.length > MAX_BUFFER_EVENTS) {
-                this.eventsBuffer = this.eventsBuffer.slice(-MAX_BUFFER_EVENTS);
-            }
+            // Mantener máximo 500 eventos en buffer (splice in-place)
+            const histExcess = this.eventsBuffer.length - MAX_BUFFER_EVENTS;
+            if (histExcess > 0) this.eventsBuffer.splice(0, histExcess);
             this.animator?.loadHistory(history);
             console.log("[CognitiveTrace] Historial cargado — grafo + buffer poblados.");
             // Si el timeline ya está abierto (restaurado por Obsidian), refrescarlo

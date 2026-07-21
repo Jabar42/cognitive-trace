@@ -35,6 +35,20 @@ function makePipes(settings: CTSettings): FilterPipe[] {
 
 const MAX_VISIBLE = 200;
 
+/** Eventos que producen un efecto visual en el grafo (nodo iluminado, pulso, etc.).
+ *  Solo estos se muestran en el timeline para que no haya expectativas falsas:
+ *  todo lo que ves en el timeline tiene su reflejo en el grafo. */
+function hasGraphEffect(e: TraceEvent): boolean {
+    if (e.type === "command") return true;
+    // okf_read / okf_traverse con slug → colorean el nodo consultado
+    if ((e.tool === "okf_traverse" || e.tool === "okf_read") && e.params?.slug) return true;
+    // okf_new exitoso → colorea el archivo creado
+    if (e.tool === "okf_new" && e.params?.created_path && e.exit_code === 0) return true;
+    // Cualquier tool con result_nodes → colorea el subgrafo resultado
+    if (Array.isArray(e.result_nodes) && e.result_nodes.length > 0) return true;
+    return false;
+}
+
 export class TimelineView extends ItemView {
     private events: TraceEvent[];
     private settings: CTSettings;
@@ -68,6 +82,7 @@ export class TimelineView extends ItemView {
     async onOpen(): Promise<void> { this.render(); }
 
     refresh(_events: TraceEvent[]): void {
+        this.events = _events;  // mantener referencia viva: el buffer de main.ts puede reasignarse con slice()
         // Agrupar tandas cercanas evita reconstruir hasta 200 filas por cada
         // evento cuando el lector recibe actividad continua.
         if (this.refreshTimer != null) return;
@@ -137,6 +152,7 @@ export class TimelineView extends ItemView {
         const pipes = this.pipes();
         for (const p of pipes) counts[p.key] = 0;
         for (const e of this.events) {
+            if (!hasGraphEffect(e)) continue;
             for (const p of pipes) { if (p.match(e)) { counts[p.key]++; break; } }
         }
         return counts;
@@ -154,7 +170,9 @@ export class TimelineView extends ItemView {
             return;
         }
 
+        // Solo eventos con efecto en el grafo: lo que ves aquí se refleja en nodos coloreados
         const filtered = [...this.events].reverse().filter((e) => {
+            if (!hasGraphEffect(e)) return false;
             for (const p of this.pipes()) { if (this.activePipes.has(p.key) && p.match(e)) return true; }
             return false;
         });

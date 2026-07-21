@@ -68,7 +68,14 @@ export class GraphAnimator {
         if (!path || !key) return false;
         if (path === key) return true;
         if (key.startsWith("#")) return false;
-        return path.endsWith("/" + key) || path.endsWith("/" + key + ".md") || path === key + ".md";
+        // Match exacto por sufijo: "tp3-cibernetico" → "frameworks/tp3-cibernetico.md"
+        if (path.endsWith("/" + key) || path.endsWith("/" + key + ".md") || path === key + ".md") return true;
+        // Fuzzy fallback: slug abreviado "plan-maestro-de-adquisicion" matchea
+        // "plans/plan-maestro-de-adquisicion-tp3studio.md" por prefijo de filename
+        const keyFile = key.includes("/") ? key.slice(key.lastIndexOf("/") + 1) : key;
+        const pathFile = path.slice(path.lastIndexOf("/") + 1).replace(/\.md$/, "");
+        if (pathFile.startsWith(keyFile)) return true;
+        return false;
     }
 
     /** Cargar solo el último prompt del historial (ventana sin gaps >60s). */
@@ -621,7 +628,8 @@ export class GraphAnimator {
     // prototipo de la clase link para escribir DESPUÉS del render nativo — nuestro tint
     // gana cada frame sin pelear con el lerp ni tocar geometría. El wrapper es stateless
     // (solo lee link.$ctColor), por lo que sobrevive rebuilds y hot-reloads sin zombies.
-    private static readonly LINK_PATCH_V = 3;
+    private static readonly LINK_PATCH_V = 4;
+    private static readonly EDGE_ALPHA = 0.55;
 
     private patchLinkRender(r: any): void {
         const sample = r.links?.[0];
@@ -638,7 +646,9 @@ export class GraphAnimator {
             const c = this.$ctColor;
             if (c != null && this.line) {
                 this.line.tint = c;
+                this.line.alpha = GraphAnimator.EDGE_ALPHA;
                 if (this.arrow) this.arrow.tint = c;
+                if (this.arrow) this.arrow.alpha = GraphAnimator.EDGE_ALPHA;
                 // Animación progresiva: la línea crece desde source hacia target
                 if (this.$ctAnimStart) {
                     const elapsed = performance.now() - this.$ctAnimStart;
@@ -649,7 +659,7 @@ export class GraphAnimator {
                     // Antes del instante de inicio el render nativo conserva la
                     // línea completa; nunca multiplicar el ancho acumulado.
                     if (elapsed >= 0) this.line.width = baseWidth * ease;
-                    if (this.arrow) this.arrow.alpha = t;
+                    if (this.arrow) this.arrow.alpha = t * GraphAnimator.EDGE_ALPHA;
                     if (t >= 1) {
                         this.line.width = baseWidth;
                         this.$ctAnimStart = null;

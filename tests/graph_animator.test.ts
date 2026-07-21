@@ -59,7 +59,7 @@ class FakeGraphics {
 }
 
 class FakeLink {
-    line = { width: 10, tint: 0 };
+    line = { width: 10, tint: 0, alpha: 1 };
     arrow = { tint: 0, alpha: 1 };
     px = { zIndex: 0 };
     renderer = { changed: vi.fn(), hanger: { sortChildren: vi.fn() } };
@@ -351,6 +351,7 @@ describe("GraphAnimator replay audio sync", () => {
 
         link.render();
         expect(link.line.width).toBe(10);
+        expect(link.line.alpha).toBe(0.55);
 
         vi.mocked(performance.now).mockReturnValue(1250);
         link.$ctAnimStart = 1000;
