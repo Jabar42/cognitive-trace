@@ -178,6 +178,28 @@ export class GraphAnimator {
     /** Replay animado de un prompt: limpia el estado y reproduce evento por evento. */
     private replayTimer: number | null = null;
 
+    /** Revelar instantáneamente todos los nodos pendientes en la cola de cascada. */
+    skipReveal(): void {
+        if (this.revealTimer != null) {
+            window.clearTimeout(this.revealTimer);
+            this.revealTimer = null;
+        }
+        while (this.revealQueue.length) {
+            const path = this.revealQueue.shift()!;
+            if (this.queuedCommands.has(path)) {
+                this.commandHighlights.set(path, this.queuedCommands.get(path)!);
+                this.nodePipes.set(path, "commands");
+                this.queuedCommands.delete(path);
+            } else {
+                this.visitedNodes.add(path);
+            }
+            this.pendingPulses.add(path);
+        }
+        this.patchAndRefresh();
+        // Si el replay ya terminó de procesar eventos, notificar finish
+        if (!this.replayActive && this.replayDone) this.finishReplay();
+    }
+
     /** Detener el replay sin borrar lo que ya se ha revelado en el grafo. */
     stopReplay(): void {
         this.replayGeneration++;
@@ -253,7 +275,7 @@ export class GraphAnimator {
         this.replayActive = true;
 
         if (!events.length) { this.replayActive = false; this.finishReplay(); return; }
-        const DELAY = 450;
+        const BASE_DELAY = 450;
         let i = 0;
         const scheduleNext = () => {
             if (generation !== this.replayGeneration) return;
@@ -262,7 +284,9 @@ export class GraphAnimator {
                 this.replayTimer = null;
                 this.replayActive = false;
                 this.replayStep = null;
-                this.finishReplay();
+                // Si la cascada de revelado aún tiene nodos, finishReplay()
+                // se llama desde scheduleReveal cuando la cola se vacíe.
+                if (!this.revealQueue.length) this.finishReplay();
                 return;
             }
             const batch: TraceEvent[] = [events[i]];
@@ -275,7 +299,8 @@ export class GraphAnimator {
             }
             this.processEvents(batch);
             onProgress?.(i, events.length);
-            this.replayTimer = window.setTimeout(scheduleNext, DELAY);
+            const delay = Math.max(30, BASE_DELAY / (this.settings.replaySpeed || 1));
+            this.replayTimer = window.setTimeout(scheduleNext, delay);
         };
         this.replayStep = scheduleNext;
         // Primer batch inmediato — sin delay inicial
@@ -376,7 +401,11 @@ export class GraphAnimator {
             this.revealTimer = null;
             if (this.replayPaused) return;
             const path = this.revealQueue.shift();
-            if (path == null) return;
+            if (path == null) {
+                // Cola vacía tras un replay → notificar finish pendiente
+                if (!this.replayActive && this.replayDone) this.finishReplay();
+                return;
+            }
             // ¿Es un comando encolado?
             if (this.queuedCommands.has(path)) {
                 this.commandHighlights.set(path, this.queuedCommands.get(path)!);

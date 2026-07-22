@@ -152,6 +152,6 @@ describe("TimelineView", () => {
 
         root.querySelectorAll(".trace-prompt-stop")[0].click();
         expect(onStop).toHaveBeenCalledOnce();
-        expect(root.querySelectorAll(".trace-prompt-stop-hidden")).toHaveLength(1);
+        expect(root.querySelectorAll(".trace-prompt-stop-hidden")).toHaveLength(2); // stop + skip
     });
 });

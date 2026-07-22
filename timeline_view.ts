@@ -58,12 +58,13 @@ export class TimelineView extends ItemView {
     private onActivatePrompt: ((events: TraceEvent[], onDone: () => void, onProgress: (current: number, total: number) => void) => void) | null = null;
     private onStopReplay: (() => void) | null = null;
     private onToggleReplayPause: (() => void) | null = null;
+    private onSkipReveal: (() => void) | null = null;
     private playingPrompt = -1;
     private replayPaused = false;
     private playbackProgress = "";
     private refreshTimer: number | null = null;
 
-    constructor(leaf: WorkspaceLeaf, events: TraceEvent[], settings: CTSettings, onFilterChange?: () => void, onActivatePrompt?: (events: TraceEvent[], onDone: () => void, onProgress: (current: number, total: number) => void) => void, onStopReplay?: () => void, onToggleReplayPause?: () => void) {
+    constructor(leaf: WorkspaceLeaf, events: TraceEvent[], settings: CTSettings, onFilterChange?: () => void, onActivatePrompt?: (events: TraceEvent[], onDone: () => void, onProgress: (current: number, total: number) => void) => void, onStopReplay?: () => void, onToggleReplayPause?: () => void, onSkipReveal?: () => void) {
         super(leaf);
         this.events = events;
         this.settings = settings;
@@ -71,6 +72,7 @@ export class TimelineView extends ItemView {
         this.onActivatePrompt = onActivatePrompt || null;
         this.onStopReplay = onStopReplay || null;
         this.onToggleReplayPause = onToggleReplayPause || null;
+        this.onSkipReveal = onSkipReveal || null;
     }
 
     private pipes(): FilterPipe[] { return makePipes(this.settings); }
@@ -102,6 +104,16 @@ export class TimelineView extends ItemView {
         const header = container.createEl("div", { cls: "trace-header" });
         const hLeft = header.createEl("div", { cls: "trace-header-left" });
         hLeft.createEl("span", { cls: "trace-header-title", text: "Cognitive Trace" });
+
+        // Indicador de conexión
+        const status = this.connectionStatus();
+        const statusDot = header.createEl("span", { cls: "trace-status-dot" });
+        statusDot.style.backgroundColor = status.color;
+        statusDot.title = status.label;
+        statusDot.setAttribute("aria-label", status.label);
+        const statusLabel = header.createEl("span", { cls: "trace-status-label", text: status.label });
+        statusLabel.title = status.detail;
+        statusLabel.setAttribute("aria-label", status.detail);
 
         const clearBtn = header.createEl("button", { cls: "trace-clear-btn", text: "Clear" });
         clearBtn.addEventListener("click", () => { this.events.length = 0; this.render(); });
@@ -144,7 +156,38 @@ export class TimelineView extends ItemView {
             if (this.replayCycles < 20) { this.replayCycles++; cycleLabel.setText(`${this.replayCycles}`); }
         });
 
+        // Selector de velocidad del replay
+        const speedCtl = toolbar.createEl("div", { cls: "trace-cycle-ctl" });
+        speedCtl.createEl("span", { cls: "trace-cycle-label", text: `${this.settings.replaySpeed}×` });
+        const speedBtn = speedCtl.createEl("button", { cls: "trace-cycle-btn", text: "⏩" });
+        speedBtn.title = "Cambiar velocidad del replay";
+        speedBtn.setAttribute("aria-label", "Cambiar velocidad del replay");
+        const SPEEDS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 5];
+        speedBtn.addEventListener("click", (ev) => {
+            ev.stopPropagation();
+            const current = SPEEDS.indexOf(this.settings.replaySpeed);
+            const next = (current + 1) % SPEEDS.length;
+            this.settings.replaySpeed = SPEEDS[next];
+            speedCtl.querySelector(".trace-cycle-label")!.textContent = `${SPEEDS[next]}×`;
+        });
+
         this.renderEventList(container, counts);
+    }
+
+    private connectionStatus(): { color: string; label: string; detail: string } {
+        if (!this.events.length) {
+            return { color: "var(--text-faint)", label: "Sin eventos", detail: "No se han recibido eventos del agente" };
+        }
+        const lastTs = new Date(this.events[this.events.length - 1].ts).getTime();
+        const ago = Date.now() - lastTs;
+        if (ago < 5_000) {
+            return { color: "#4CAF50", label: "Live", detail: `Último evento hace ${Math.round(ago / 1000)}s` };
+        }
+        if (ago < 60_000) {
+            return { color: "#FFC107", label: "Idle", detail: `Último evento hace ${Math.round(ago / 1000)}s` };
+        }
+        const mins = Math.round(ago / 60_000);
+        return { color: "var(--text-faint)", label: "Inactivo", detail: `Último evento hace ${mins} min` };
     }
 
     private countByPipe(): Record<string, number> {
@@ -264,6 +307,18 @@ export class TimelineView extends ItemView {
                 });
                 progress.title = "Progreso del replay";
 
+                // Botón saltar al final: revela todos los nodos pendientes instantáneamente
+                const skipBtn = header.createEl("button", {
+                    cls: "trace-prompt-activate trace-prompt-skip" + (isPlaying ? "" : " trace-prompt-stop-hidden"),
+                    text: "⏭",
+                });
+                skipBtn.title = "Saltar al final — revelar todo instantáneamente";
+                skipBtn.setAttribute("aria-label", "Saltar al final");
+                skipBtn.addEventListener("click", (ev) => {
+                    ev.stopPropagation();
+                    this.onSkipReveal?.();
+                });
+
                 pauseBtn.addEventListener("click", (ev) => {
                     ev.stopPropagation();
                     if (this.playingPrompt === pi) {
@@ -284,6 +339,7 @@ export class TimelineView extends ItemView {
                     pauseBtn.title = "Pausar reproducción";
                     pauseBtn.setAttribute("aria-label", "Pausar reproducción");
                     stopBtn.classList.remove("trace-prompt-stop-hidden");
+                    skipBtn.classList.remove("trace-prompt-stop-hidden");
                     progress.classList.remove("trace-prompt-progress-hidden");
                     progress.setText(this.playbackProgress);
                     this.onActivatePrompt!(allEvents, () => this.completePlayback(), (current, total) => {
@@ -332,6 +388,25 @@ export class TimelineView extends ItemView {
                     if (event.duration_ms) extra.push(`${event.duration_ms}ms`);
                     if (extra.length) eventBody.createEl("span", { cls: "trace-event-extra", text: extra.join(" · ") });
                 }
+
+                // Tooltip con detalles completos
+                const tooltipParts: string[] = [];
+                tooltipParts.push(event.ts.slice(0, 19).replace("T", " "));
+                if (event.tool) tooltipParts.push(event.tool);
+                if (event.params?.slug) tooltipParts.push(`slug: ${event.params.slug}`);
+                if (event.params?.query) tooltipParts.push(`query: ${event.params.query}`);
+                if (event.params?.command) tooltipParts.push(`cmd: ${event.params.command}`);
+                if (event.duration_ms) tooltipParts.push(`${event.duration_ms}ms`);
+                if (event.exit_code !== undefined) tooltipParts.push(`exit: ${event.exit_code}`);
+                if (event.result_nodes?.length) {
+                    tooltipParts.push(`--- ${event.result_nodes.length} nodos ---`);
+                    tooltipParts.push(...event.result_nodes.slice(0, 10));
+                    if (event.result_nodes.length > 10) tooltipParts.push(`... +${event.result_nodes.length - 10} más`);
+                }
+                if (event.nodes?.length) {
+                    tooltipParts.push(`nodos: ${event.nodes.join(", ")}`);
+                }
+                row.title = tooltipParts.join("\n");
             }
 
             // Toggle click
@@ -387,6 +462,9 @@ export class TimelineView extends ItemView {
             el.setAttribute("aria-label", el.title);
         });
         this.containerEl.querySelectorAll(".trace-prompt-stop").forEach((button) => {
+            (button as HTMLElement).classList.add("trace-prompt-stop-hidden");
+        });
+        this.containerEl.querySelectorAll(".trace-prompt-skip").forEach((button) => {
             (button as HTMLElement).classList.add("trace-prompt-stop-hidden");
         });
         this.containerEl.querySelectorAll(".trace-prompt-progress").forEach((progress) => {

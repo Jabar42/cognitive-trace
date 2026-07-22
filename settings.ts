@@ -14,6 +14,7 @@ export interface CTSettings {
     pulseIndefinite: boolean; // el nodo actual pulsa en loop hasta que el agente avance
     pulseDuration: number;  // ms
     revealStagger: number;  // ms entre nodos al revelar resultados (0 = todos a la vez)
+    replaySpeed: number;    // factor de velocidad del replay (0.25 — 5.0, default 1)
     replayBeeps: boolean;   // sonido al aparecer cada nodo en vivo o durante replay
 }
 
@@ -29,6 +30,7 @@ export const DEFAULT_SETTINGS: CTSettings = {
     pulseIndefinite: false,
     pulseDuration: 900,
     revealStagger: 80,
+    replaySpeed: 1,
     replayBeeps: true,
 };
 
@@ -115,6 +117,27 @@ export class CTSettingTab extends PluginSettingTab {
                 .setDynamicTooltip()
                 .onChange(async (v) => {
                     this.plugin.settings.pulseDuration = v;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl).setName("Replay").setHeading();
+        new Setting(containerEl)
+            .setName("Velocidad del replay")
+            .setDesc("Factor de velocidad: 0.25 = lento, 5 = rápido. Afecta el delay entre batches de eventos durante la reproducción.")
+            .addDropdown(d => d
+                .addOptions({
+                    "0.25": "0.25×",
+                    "0.5": "0.5×",
+                    "0.75": "0.75×",
+                    "1": "1×",
+                    "1.5": "1.5×",
+                    "2": "2×",
+                    "3": "3×",
+                    "5": "5×",
+                })
+                .setValue(String(this.plugin.settings.replaySpeed))
+                .onChange(async (v) => {
+                    this.plugin.settings.replaySpeed = Number(v);
                     await this.plugin.saveSettings();
                 }));
 
