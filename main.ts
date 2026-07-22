@@ -118,6 +118,8 @@ export default class CognitiveTracePlugin extends Plugin {
                     this.animator?.toggleReplayPause();
                 }, () => {
                     this.animator?.skipReveal();
+                }, (slug: string) => {
+                    this.animator?.highlightNode(slug);
                 });
                 if (this.animator) this.animator.activePipes = view.activePipes;
                 return view;

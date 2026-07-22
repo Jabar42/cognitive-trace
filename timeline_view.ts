@@ -59,12 +59,13 @@ export class TimelineView extends ItemView {
     private onStopReplay: (() => void) | null = null;
     private onToggleReplayPause: (() => void) | null = null;
     private onSkipReveal: (() => void) | null = null;
+    private onHighlightNode: ((slug: string) => void) | null = null;
     private playingPrompt = -1;
     private replayPaused = false;
     private playbackProgress = "";
     private refreshTimer: number | null = null;
 
-    constructor(leaf: WorkspaceLeaf, events: TraceEvent[], settings: CTSettings, onFilterChange?: () => void, onActivatePrompt?: (events: TraceEvent[], onDone: () => void, onProgress: (current: number, total: number) => void) => void, onStopReplay?: () => void, onToggleReplayPause?: () => void, onSkipReveal?: () => void) {
+    constructor(leaf: WorkspaceLeaf, events: TraceEvent[], settings: CTSettings, onFilterChange?: () => void, onActivatePrompt?: (events: TraceEvent[], onDone: () => void, onProgress: (current: number, total: number) => void) => void, onStopReplay?: () => void, onToggleReplayPause?: () => void, onSkipReveal?: () => void, onHighlightNode?: (slug: string) => void) {
         super(leaf);
         this.events = events;
         this.settings = settings;
@@ -73,6 +74,7 @@ export class TimelineView extends ItemView {
         this.onStopReplay = onStopReplay || null;
         this.onToggleReplayPause = onToggleReplayPause || null;
         this.onSkipReveal = onSkipReveal || null;
+        this.onHighlightNode = onHighlightNode || null;
     }
 
     private pipes(): FilterPipe[] { return makePipes(this.settings); }
@@ -407,6 +409,20 @@ export class TimelineView extends ItemView {
                     tooltipParts.push(`nodos: ${event.nodes.join(", ")}`);
                 }
                 row.title = tooltipParts.join("\n");
+
+                // Click en evento → highlight en grafo
+                if (this.onHighlightNode) {
+                    row.addClass("trace-event-clickable");
+                    const clickSlug = event.params?.slug || event.params?.created_path || event.result_nodes?.[0];
+                    row.addEventListener("click", (ev) => {
+                        ev.stopPropagation();
+                        if (clickSlug) {
+                            row.addClass("trace-event-flash");
+                            setTimeout(() => row.classList.remove("trace-event-flash"), 600);
+                            this.onHighlightNode?.(clickSlug);
+                        }
+                    });
+                }
             }
 
             // Toggle click

@@ -26,6 +26,7 @@ export class GraphAnimator {
     // Se marcan por cambio de estado lógico (no por transición de color) para que los
     // rebuilds de setData — que recrean nodos con color null — no re-disparen pulsos.
     private pendingPulses = new Set<string>();
+    private flashNode: { slug: string; until: number } | null = null;  // click→highlight temporal
     // Se conserva hasta que el renderer tenga el nodo (la indexación de un
     // archivo nuevo puede llegar después del evento okf_new).
     private pendingAppearances = new Set<string>();
@@ -496,6 +497,39 @@ export class GraphAnimator {
         this.clearPulses();
     }
 
+    /** Buscar un nodo en el grafo por slug, con fallback flexible:
+     *  1. Match exacto vía nodeMatches
+     *  2. Match por {dir-padre}/{filename} ignorando prefijo de ruta (ej: migración sistema/skills → skills) */
+    private findNode(slug: string): string | null {
+        // Extraer "dir-padre/filename" del slug (últimos dos segmentos)
+        const parts = slug.split("/");
+        const tail = parts.slice(-2).join("/");  // ej: "browser-automation/SKILL.md"
+        for (const leaf of this.app.workspace.getLeavesOfType("graph")) {
+            const r = (leaf.view as any)?.renderer;
+            if (!r?.nodes) continue;
+            for (const node of r.nodes) {
+                const path: string = node.id || "";
+                if (this.nodeMatches(path, slug)) return path;
+                if (path.endsWith("/" + tail) || path === tail) return path;
+            }
+        }
+        return null;
+    }
+
+    /** Forzar un destello + pulso en un nodo específico (click en timeline → highlight en grafo). */
+    highlightNode(slug: string): void {
+        const match = this.findNode(slug);
+        if (!match) return;  // nodo no encontrado en el grafo
+        // Beep de highlight
+        if (this.settings.replayBeeps && this.audioCtx?.state === "running") {
+            this.beep("traverse");
+        }
+        this.flashNode = { slug: match, until: Date.now() + 1200 };
+        this.patchAndRefresh();
+        setTimeout(() => this.flashNode = null, 1200);
+        setTimeout(() => this.patchAndRefresh(), 1250);
+    }
+
     reset(): void {
         this.clearTraceState();
         this.nodePipes.clear();
@@ -535,9 +569,25 @@ export class GraphAnimator {
         // focus_cluster: resolver una vez, la primera pasada con renderer disponible
         this.applyFocusCluster(r);
 
+
+        const flashing = this.flashNode && Date.now() < this.flashNode.until ? this.flashNode.slug : null;
+        if (this.flashNode && !flashing) this.flashNode = null;  // expiró
+
         for (const node of r.nodes) {
             const path: string = node.id || "";
             if (!path) continue;
+            // Destello one-shot (click→highlight): dorado + pulso, no aplicar lógica normal
+            if (flashing && this.nodeMatches(path, flashing)) {
+                const flashRgb = this.hex(this.settings.colorCurrent);
+                if (!node.color || node.color.rgb !== flashRgb) {
+                    node.color = { a: 1, rgb: flashRgb };
+                    // Pulso de onda expansiva
+                    if (this.settings.pulseEnabled) {
+                        this.spawnPulse(r, node, flashRgb, false);
+                    }
+                }
+                continue;
+            }
 
             let targetColor: number | null = null;
 

@@ -205,6 +205,19 @@
     background: var(--background-modifier-hover);
 }
 
+.trace-event-clickable {
+    cursor: pointer;
+}
+
+.trace-event-flash {
+    animation: event-flash 0.6s ease-out;
+}
+
+@keyframes event-flash {
+    0%   { background: color-mix(in srgb, var(--text-accent) 25%, transparent); }
+    100% { background: transparent; }
+}
+
 .trace-event-left {
     display: flex;
     align-items: center;
