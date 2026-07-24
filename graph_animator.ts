@@ -87,7 +87,7 @@ export class GraphAnimator {
         const last = this.lastPromptEvents(events, GAP);
         for (const e of last) {
             if (e.type === "command") { this.executeCommand(e); continue; }
-            if (e.tool === "new" && e.params?.created_path && e.exit_code === 0) {
+            if (e.tool === "okf_new" && e.params?.created_path && e.exit_code === 0) {
                 const path = e.params.created_path;
                 this.createdNodes.add(path);
                 this.visitedNodes.add(path);
@@ -348,7 +348,7 @@ export class GraphAnimator {
         for (const e of currentEvents) {
             this.lastEventTs = Math.max(this.lastEventTs, new Date(e.ts).getTime());
             if (e.type === "command") { this.executeCommand(e); continue; }
-            if (e.tool === "new" && e.params?.created_path && e.exit_code === 0) {
+            if (e.tool === "okf_new" && e.params?.created_path && e.exit_code === 0) {
                 const path = e.params.created_path;
                 this.createdNodes.add(path);
                 this.visitedNodes.add(path);
