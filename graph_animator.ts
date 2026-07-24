@@ -95,16 +95,16 @@ export class GraphAnimator {
                 this.pendingAppearances.add(path);
                 continue;
             }
-            if ((e.tool === "traverse" || e.tool === "read") && e.params?.slug) {
+            if ((e.tool === "okf_traverse" || e.tool === "okf_read") && e.params?.slug) {
                 const slug = e.params.slug;
-                const pipe: PipeKey = e.tool === "read" ? "read" : "traverse";
+                const pipe: PipeKey = e.tool === "okf_read" ? "read" : "traverse";
                 this.visitedNodes.add(slug);
                 this.nodePipes.set(slug, pipe);
-                if (e.tool === "read") this.readNodes.add(slug);
+                if (e.tool === "okf_read") this.readNodes.add(slug);
                 this.currentNode = slug;
             }
             if (Array.isArray(e.result_nodes)) {
-                const resPipe: PipeKey = (e.tool === "traverse") ? "traverse" : "search";
+                const resPipe: PipeKey = (e.tool === "okf_traverse") ? "traverse" : "search";
                 for (const p of e.result_nodes) {
                     this.visitedNodes.add(p);
                     const existing = this.nodePipes.get(p);
@@ -357,22 +357,22 @@ export class GraphAnimator {
                 this.pendingPulses.add(path);
                 continue;
             }
-            if ((e.tool === "traverse" || e.tool === "read") && e.params?.slug) {
+            if ((e.tool === "okf_traverse" || e.tool === "okf_read") && e.params?.slug) {
                 const slug = e.params.slug;
-                const pipe: PipeKey = e.tool === "read" ? "read" : "traverse";
+                const pipe: PipeKey = e.tool === "okf_read" ? "read" : "traverse";
                 // Durante replay: siempre pulso, incluso en re-lecturas del mismo nodo
                 if (!this.visitedNodes.has(slug) || this.currentNode !== slug || this.replayActive) {
                     this.pendingPulses.add(slug);
                 }
                 this.visitedNodes.add(slug);
                 this.nodePipes.set(slug, pipe);
-                if (e.tool === "read") this.readNodes.add(slug);
+                if (e.tool === "okf_read") this.readNodes.add(slug);
                 this.currentNode = slug;
             }
             // Subgrafo del resultado: hereda el pipe de la tool que lo generó
             // (search result_nodes → pipe "search", graph → "search", etc.)
             if (Array.isArray(e.result_nodes)) {
-                const resPipe: PipeKey = (e.tool === "traverse") ? "traverse" : "search";
+                const resPipe: PipeKey = (e.tool === "okf_traverse") ? "traverse" : "search";
                 for (const p of e.result_nodes) {
                     const isNew = !this.visitedNodes.has(p);
                     if (this.settings.revealStagger > 0) {
