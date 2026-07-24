@@ -7,9 +7,9 @@ import { CTSettings } from "./settings";
 export const TIMELINE_VIEW_TYPE = "cognitive-trace-timeline";
 
 const TOOL_ICONS: Record<string, string> = {
-    okf_traverse: "🔗", okf_read: "📖", okf_search: "🔍",
-    okf_graph: "🕸️", okf_health: "💚", okf_index: "📑",
-    okf_touch: "📊", okf_new: "✨",
+    traverse: "🔗", read: "📖", search: "🔍",
+    graph: "🕸️", health: "💚", index: "📑",
+    touch: "📊", new: "✨",
 };
 
 interface FilterPipe {
@@ -21,13 +21,13 @@ interface FilterPipe {
 function makePipes(settings: CTSettings): FilterPipe[] {
     return [
         { key: "traverse", label: "Navegación", getColor: (s) => s.colorCurrent,
-          match: (e) => e.type !== "command" && e.tool === "okf_traverse" },
+          match: (e) => e.type !== "command" && e.tool === "traverse" },
         { key: "read", label: "Lecturas", getColor: (s) => s.colorRead,
-          match: (e) => e.type !== "command" && e.tool === "okf_read" },
+          match: (e) => e.type !== "command" && e.tool === "read" },
         { key: "search", label: "Búsquedas", getColor: (s) => s.colorVisited,
-          match: (e) => e.type !== "command" && ["okf_search","okf_graph","okf_health","okf_index","okf_touch"].includes(e.tool || "") },
+          match: (e) => e.type !== "command" && ["search","graph","health","index","touch"].includes(e.tool || "") },
         { key: "create", label: "Creaciones", getColor: (s) => s.colorCreate,
-          match: (e) => e.type !== "command" && e.tool === "okf_new" },
+          match: (e) => e.type !== "command" && e.tool === "new" },
         { key: "commands", label: "Comandos", getColor: (s) => s.colorCommand,
           match: (e) => e.type === "command" },
     ];
@@ -40,10 +40,10 @@ const MAX_VISIBLE = 200;
  *  todo lo que ves en el timeline tiene su reflejo en el grafo. */
 function hasGraphEffect(e: TraceEvent): boolean {
     if (e.type === "command") return true;
-    // okf_read / okf_traverse con slug → colorean el nodo consultado
-    if ((e.tool === "okf_traverse" || e.tool === "okf_read") && e.params?.slug) return true;
-    // okf_new exitoso → colorea el archivo creado
-    if (e.tool === "okf_new" && e.params?.created_path && e.exit_code === 0) return true;
+    // read / traverse con slug → colorean el nodo consultado
+    if ((e.tool === "traverse" || e.tool === "read") && e.params?.slug) return true;
+    // new exitoso → colorea el archivo creado
+    if (e.tool === "new" && e.params?.created_path && e.exit_code === 0) return true;
     // Cualquier tool con result_nodes → colorea el subgrafo resultado
     if (Array.isArray(e.result_nodes) && e.result_nodes.length > 0) return true;
     return false;

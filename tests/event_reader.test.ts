@@ -33,7 +33,7 @@ describe("EventReader", () => {
         const { reader, path } = makeReader();
         const received: unknown[] = [];
         reader.onEvents((events) => received.push(...events));
-        const line = makeEvent("okf_traverse");
+        const line = makeEvent("traverse");
         const split = Math.floor(line.length / 2);
 
         appendFileSync(path, line.slice(0, split));
@@ -46,25 +46,25 @@ describe("EventReader", () => {
     });
 
     it("reinicia el offset después de una truncación del JSONL", () => {
-        const first = makeEvent("okf_traverse") + "\n";
+        const first = makeEvent("traverse") + "\n";
         const { reader, path } = makeReader(first + " ".repeat(100));
         const received: any[] = [];
         reader.onEvents((events) => received.push(...events));
 
-        writeFileSync(path, makeEvent("okf_new") + "\n");
+        writeFileSync(path, makeEvent("new") + "\n");
         (reader as any).poll();
 
         expect(received).toHaveLength(1);
-        expect(received[0].tool).toBe("okf_new");
+        expect(received[0].tool).toBe("new");
     });
 
     it("puede cargar solo los eventos históricos más recientes", () => {
-        const initial = ["okf_traverse", "okf_read", "okf_search"]
+        const initial = ["traverse", "read", "search"]
             .map(makeEvent)
             .join("\n") + "\n";
         const { reader } = makeReader(initial);
 
-        expect(reader.readAll(2).map((event) => event.tool)).toEqual(["okf_read", "okf_search"]);
+        expect(reader.readAll(2).map((event) => event.tool)).toEqual(["read", "search"]);
     });
 
     it("notifica líneas JSON malformadas sin notificar una línea parcial", () => {

@@ -4,11 +4,11 @@ import type CognitiveTracePlugin from "./main";
 
 export interface CTSettings {
     colorCurrent: string;   // último nodo consultado — foco actual del agente
-    colorRead: string;      // nodos con body completo leído (okf_read)
+    colorRead: string;      // nodos con body completo leído (read)
     colorVisited: string;   // nodos cuya ficha apareció en resultados (traverse/search)
     colorPath: string;      // highlight_path
     colorCommand: string;   // default de highlight_nodes
-    colorCreate: string;    // archivos creados vía okf_new
+    colorCreate: string;    // archivos creados vía new
     edgeColoring: boolean;  // colorear aristas entre nodos iluminados
     pulseEnabled: boolean;  // onda expansiva al pintar
     pulseIndefinite: boolean; // el nodo actual pulsa en loop hasta que el agente avance
@@ -63,19 +63,19 @@ export class CTSettingTab extends PluginSettingTab {
             "El último nodo que el agente consultó — su foco ahora mismo. Al avanzar, pasa al color de leído o visto según cómo lo consultó.",
             "colorCurrent");
         color("Nodos leídos",
-            "El agente leyó el contenido completo con okf_read: el body del documento entró a su contexto. Es el mapa de su memoria de trabajo.",
+            "El agente leyó el contenido completo con read: el body del documento entró a su contexto. Es el mapa de su memoria de trabajo.",
             "colorRead");
         color("Nodos vistos",
             "El agente vio la ficha del nodo en un resultado de traverse/search — título, tipo, description y conexiones — pero no leyó su contenido.",
             "colorVisited");
         color("Camino resaltado",
-            "Ruta entre nodos que el agente marcó explícitamente vía okf_graph_command highlight_path.",
+            "Ruta entre nodos que el agente marcó explícitamente vía graph_command highlight_path.",
             "colorPath");
         color("Highlight de comandos",
-            "Color default cuando el agente resalta nodos vía okf_graph_command (highlight_nodes, most/least visited).",
+            "Color default cuando el agente resalta nodos vía graph_command (highlight_nodes, most/least visited).",
             "colorCommand");
         color("Nodos creados",
-            "Archivos nuevos creados por el agente mediante okf_new.",
+            "Archivos nuevos creados por el agente mediante new.",
             "colorCreate");
 
         new Setting(containerEl).setName("Aristas").setHeading();

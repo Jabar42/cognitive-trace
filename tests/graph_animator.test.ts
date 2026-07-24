@@ -93,7 +93,7 @@ function makeEvent(result_nodes: string[]) {
         type: "tool" as const,
         session: "test",
         ts: "2026-07-19T04:00:00.000Z",
-        tool: "okf_search",
+        tool: "search",
         result_nodes,
     };
 }
@@ -103,7 +103,7 @@ function makeCreateEvent(created_path: string) {
         type: "tool" as const,
         session: "test",
         ts: "2026-07-19T04:00:00.000Z",
-        tool: "okf_new",
+        tool: "new",
         params: { created_path },
         exit_code: 0,
     };
@@ -190,7 +190,7 @@ describe("GraphAnimator replay audio sync", () => {
         expect(renderer.nodes[1].color).toBeNull();
     });
 
-    it("representa okf_new con su pipe create", async () => {
+    it("representa new con su pipe create", async () => {
         const renderer = makeRenderer(["insights/nuevo-insight.md"]);
         const app = { workspace: { on: vi.fn(), getLeavesOfType: vi.fn(() => [{ view: { renderer } }]) } } as any;
         const animator = new GraphAnimator(app, { ...DEFAULT_SETTINGS, revealStagger: 0 });
@@ -217,7 +217,7 @@ describe("GraphAnimator replay audio sync", () => {
             type: "tool",
             session: "live",
             ts: "2026-07-19T04:00:00.000Z",
-            tool: "okf_traverse",
+            tool: "traverse",
             params: { slug: "Notes/live" },
             exit_code: 0,
         }]);
@@ -305,18 +305,18 @@ describe("GraphAnimator replay audio sync", () => {
 
         animator.loadHistory([{
             type: "tool", session: "history", ts: "2026-07-19T04:00:00.000Z",
-            tool: "okf_traverse", params: { slug: "Notes/old" }, exit_code: 0,
+            tool: "traverse", params: { slug: "Notes/old" }, exit_code: 0,
         }]);
         animator.processEvents([{
             type: "tool", session: "live", ts: "2026-07-19T04:02:00.000Z",
-            tool: "okf_traverse", params: { slug: "Notes/new" }, exit_code: 0,
+            tool: "traverse", params: { slug: "Notes/new" }, exit_code: 0,
         }]);
 
         expect(renderer.nodes[0].color).toBeNull();
         expect(renderer.nodes[1].color).not.toBeNull();
     });
 
-    it("reintenta la aparición de okf_new si el índice del grafo llega tarde", () => {
+    it("reintenta la aparición de new si el índice del grafo llega tarde", () => {
         const renderer = makeRenderer(["insights/delayed.md"]);
         const delayedNode = renderer.nodes[0];
         renderer.nodes = [];
@@ -328,7 +328,7 @@ describe("GraphAnimator replay audio sync", () => {
 
         animator.processEvents([{
             type: "tool", session: "live", ts: "2026-07-19T04:00:00.000Z",
-            tool: "okf_new", params: { created_path: "insights/delayed.md" }, exit_code: 0,
+            tool: "new", params: { created_path: "insights/delayed.md" }, exit_code: 0,
         }]);
         expect(audio.oscillators).toHaveLength(0);
 

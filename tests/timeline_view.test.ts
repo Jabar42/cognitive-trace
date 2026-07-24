@@ -97,9 +97,9 @@ describe("TimelineView", () => {
 
     it("agrupa eventos en prompts separados por gaps de más de 60 segundos", async () => {
         const events = [
-            makeEvent("okf_traverse", "2026-07-19T04:00:00.000Z", { params: { slug: "Notes/a" } }),
-            makeEvent("okf_read", "2026-07-19T04:00:01.000Z", { params: { slug: "Notes/a" } }),
-            makeEvent("okf_search", "2026-07-19T04:02:00.000Z", { result_nodes: ["Notes/b.md"] }),
+            makeEvent("traverse", "2026-07-19T04:00:00.000Z", { params: { slug: "Notes/a" } }),
+            makeEvent("read", "2026-07-19T04:00:01.000Z", { params: { slug: "Notes/a" } }),
+            makeEvent("search", "2026-07-19T04:02:00.000Z", { result_nodes: ["Notes/b.md"] }),
         ];
         const { root, view } = makeView(events);
 
@@ -112,8 +112,8 @@ describe("TimelineView", () => {
     it("aplica filtros y notifica al grafo", async () => {
         const onFilterChange = vi.fn();
         const events = [
-            makeEvent("okf_traverse", "2026-07-19T04:00:00.000Z", { params: { slug: "Notes/a" } }),
-            makeEvent("okf_read", "2026-07-19T04:00:01.000Z", { params: { slug: "Notes/a" } }),
+            makeEvent("traverse", "2026-07-19T04:00:00.000Z", { params: { slug: "Notes/a" } }),
+            makeEvent("read", "2026-07-19T04:00:01.000Z", { params: { slug: "Notes/a" } }),
         ];
         const { root, view } = makeView(events, { filter: onFilterChange });
 
@@ -128,7 +128,7 @@ describe("TimelineView", () => {
         const onActivate = vi.fn();
         const onStop = vi.fn();
         const onPause = vi.fn();
-        const events = [makeEvent("okf_traverse", "2026-07-19T04:00:00.000Z", { params: { slug: "Notes/a" } })];
+        const events = [makeEvent("traverse", "2026-07-19T04:00:00.000Z", { params: { slug: "Notes/a" } })];
         const { root, view } = makeView(events, {
             activate: onActivate,
             stop: onStop,

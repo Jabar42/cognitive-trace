@@ -13,8 +13,8 @@ export class GraphAnimator {
     private settings: CTSettings;
     private enabled = true;
     private visitedNodes = new Set<string>();
-    private readNodes = new Set<string>();  // body completo leído vía okf_read
-    private createdNodes = new Set<string>(); // archivos creados vía okf_new
+    private readNodes = new Set<string>();  // body completo leído vía read
+    private createdNodes = new Set<string>(); // archivos creados vía new
     private currentNode: string | null = null;
     // Pipe de origen por nodo → atenúa si el filtro del timeline está off
     private nodePipes = new Map<string, PipeKey>();
@@ -28,7 +28,7 @@ export class GraphAnimator {
     private pendingPulses = new Set<string>();
     private flashNode: { slug: string; until: number } | null = null;  // click→highlight temporal
     // Se conserva hasta que el renderer tenga el nodo (la indexación de un
-    // archivo nuevo puede llegar después del evento okf_new).
+    // archivo nuevo puede llegar después del evento new).
     private pendingAppearances = new Set<string>();
     private pulses: Array<{ node: any; gfx: any; renderer: any; start: number; rgb: number; dur: number; beacon: boolean }> = [];
     private pulseRaf: number | null = null;
@@ -87,7 +87,7 @@ export class GraphAnimator {
         const last = this.lastPromptEvents(events, GAP);
         for (const e of last) {
             if (e.type === "command") { this.executeCommand(e); continue; }
-            if (e.tool === "okf_new" && e.params?.created_path && e.exit_code === 0) {
+            if (e.tool === "new" && e.params?.created_path && e.exit_code === 0) {
                 const path = e.params.created_path;
                 this.createdNodes.add(path);
                 this.visitedNodes.add(path);
@@ -95,16 +95,16 @@ export class GraphAnimator {
                 this.pendingAppearances.add(path);
                 continue;
             }
-            if ((e.tool === "okf_traverse" || e.tool === "okf_read") && e.params?.slug) {
+            if ((e.tool === "traverse" || e.tool === "read") && e.params?.slug) {
                 const slug = e.params.slug;
-                const pipe: PipeKey = e.tool === "okf_read" ? "read" : "traverse";
+                const pipe: PipeKey = e.tool === "read" ? "read" : "traverse";
                 this.visitedNodes.add(slug);
                 this.nodePipes.set(slug, pipe);
-                if (e.tool === "okf_read") this.readNodes.add(slug);
+                if (e.tool === "read") this.readNodes.add(slug);
                 this.currentNode = slug;
             }
             if (Array.isArray(e.result_nodes)) {
-                const resPipe: PipeKey = (e.tool === "okf_traverse") ? "traverse" : "search";
+                const resPipe: PipeKey = (e.tool === "traverse") ? "traverse" : "search";
                 for (const p of e.result_nodes) {
                     this.visitedNodes.add(p);
                     const existing = this.nodePipes.get(p);
@@ -348,7 +348,7 @@ export class GraphAnimator {
         for (const e of currentEvents) {
             this.lastEventTs = Math.max(this.lastEventTs, new Date(e.ts).getTime());
             if (e.type === "command") { this.executeCommand(e); continue; }
-            if (e.tool === "okf_new" && e.params?.created_path && e.exit_code === 0) {
+            if (e.tool === "new" && e.params?.created_path && e.exit_code === 0) {
                 const path = e.params.created_path;
                 this.createdNodes.add(path);
                 this.visitedNodes.add(path);
@@ -357,22 +357,22 @@ export class GraphAnimator {
                 this.pendingPulses.add(path);
                 continue;
             }
-            if ((e.tool === "okf_traverse" || e.tool === "okf_read") && e.params?.slug) {
+            if ((e.tool === "traverse" || e.tool === "read") && e.params?.slug) {
                 const slug = e.params.slug;
-                const pipe: PipeKey = e.tool === "okf_read" ? "read" : "traverse";
+                const pipe: PipeKey = e.tool === "read" ? "read" : "traverse";
                 // Durante replay: siempre pulso, incluso en re-lecturas del mismo nodo
                 if (!this.visitedNodes.has(slug) || this.currentNode !== slug || this.replayActive) {
                     this.pendingPulses.add(slug);
                 }
                 this.visitedNodes.add(slug);
                 this.nodePipes.set(slug, pipe);
-                if (e.tool === "okf_read") this.readNodes.add(slug);
+                if (e.tool === "read") this.readNodes.add(slug);
                 this.currentNode = slug;
             }
             // Subgrafo del resultado: hereda el pipe de la tool que lo generó
-            // (okf_search result_nodes → pipe "search", okf_graph → "search", etc.)
+            // (search result_nodes → pipe "search", graph → "search", etc.)
             if (Array.isArray(e.result_nodes)) {
-                const resPipe: PipeKey = (e.tool === "okf_traverse") ? "traverse" : "search";
+                const resPipe: PipeKey = (e.tool === "traverse") ? "traverse" : "search";
                 for (const p of e.result_nodes) {
                     const isNew = !this.visitedNodes.has(p);
                     if (this.settings.revealStagger > 0) {
