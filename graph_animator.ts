@@ -785,7 +785,11 @@ export class GraphAnimator {
         proto.render = function () {
             orig.call(this);
             const c = this.$ctColor;
-            if (c != null && this.line) {
+            const hidden = this.$ctHidden;
+            if (hidden && this.line) {
+                this.line.alpha = 0;
+                if (this.arrow) this.arrow.alpha = 0;
+            } else if (c != null && this.line) {
                 this.line.tint = c;
                 this.line.alpha = GraphAnimator.EDGE_ALPHA;
                 if (this.arrow) this.arrow.tint = c;
@@ -810,7 +814,7 @@ export class GraphAnimator {
                     try { this.renderer.changed?.(); } catch (_) {}
                 }
             }
-            const z = c != null ? 0.5 : 0;
+            const z = (c != null && !hidden) ? 0.5 : 0;
             if (this.px && this.px.zIndex !== z) {
                 this.px.zIndex = z;
                 this.renderer.hanger.sortChildren();
@@ -823,6 +827,7 @@ export class GraphAnimator {
         if (!this.settings.edgeColoring) {
             for (const link of r.links) {
                 if (link.$ctColor != null) link.$ctColor = null;
+                if (link.$ctHidden) link.$ctHidden = false;
                 link.$ctAnimStart = null;
                 link.$ctAnimBaseWidth = null;
             }
@@ -842,6 +847,7 @@ export class GraphAnimator {
                 const targets = this.typedEdges.get(srcId);
                 const isTyped = targets?.has(tgtId) || false;
                 if (isTyped) {
+                    link.$ctHidden = false;
                     if (link.$ctColor !== typedColor) {
                         link.$ctColor = typedColor;
                         link.$ctAnimBaseWidth = typeof link.line?.width === "number" ? link.line.width : null;
@@ -849,6 +855,7 @@ export class GraphAnimator {
                         link.$ctAnimDur = 500;
                     }
                 } else {
+                    link.$ctHidden = true;
                     if (link.$ctColor != null) link.$ctColor = null;
                     link.$ctAnimStart = null;
                     link.$ctAnimBaseWidth = null;
@@ -856,6 +863,8 @@ export class GraphAnimator {
                 continue;
             }
             // ── Comportamiento normal: colorear aristas entre nodos iluminados ──
+            // Limpiar flag de hidden si viene del modo tipado
+            if (link.$ctHidden) link.$ctHidden = false;
             const sc = link.source?.color;
             const tc = link.target?.color;
             if (sc && tc) {
