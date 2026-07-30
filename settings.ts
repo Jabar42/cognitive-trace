@@ -10,6 +10,8 @@ export interface CTSettings {
     colorCommand: string;   // default de highlight_nodes
     colorCreate: string;    // archivos creados vía new
     edgeColoring: boolean;  // colorear aristas entre nodos iluminados
+    showTypedEdgesOnly: boolean;  // ocultar wikilinks y mostrar solo aristas tipadas del frontmatter
+    colorTypedEdge: string; // color para aristas tipadas (links: en frontmatter)
     pulseEnabled: boolean;  // onda expansiva al pintar
     pulseIndefinite: boolean; // el nodo actual pulsa en loop hasta que el agente avance
     pulseDuration: number;  // ms
@@ -26,6 +28,8 @@ export const DEFAULT_SETTINGS: CTSettings = {
     colorCommand: "#FF6B35",
     colorCreate: "#FF4FD8",
     edgeColoring: true,
+    showTypedEdgesOnly: false,
+    colorTypedEdge: "#FF6B35",
     pulseEnabled: true,
     pulseIndefinite: false,
     pulseDuration: 900,
@@ -86,6 +90,24 @@ export class CTSettingTab extends PluginSettingTab {
                 .setValue(this.plugin.settings.edgeColoring)
                 .onChange(async (v) => {
                     this.plugin.settings.edgeColoring = v;
+                    await this.plugin.saveSettings();
+                }));
+        new Setting(containerEl)
+            .setName("Solo aristas tipadas")
+            .setDesc("Oculta los wikilinks nativos y muestra únicamente las aristas declaradas en links: del frontmatter OKF (extiende, refina, fundamenta, aplica, depende, corrige). Las aristas tipadas se dibujan en el color de abajo.")
+            .addToggle(t => t
+                .setValue(this.plugin.settings.showTypedEdgesOnly)
+                .onChange(async (v) => {
+                    this.plugin.settings.showTypedEdgesOnly = v;
+                    await this.plugin.saveSettings();
+                }));
+        new Setting(containerEl)
+            .setName("Color aristas tipadas")
+            .setDesc("Color para las aristas que provienen de links: en el frontmatter.")
+            .addColorPicker(cp => cp
+                .setValue(this.plugin.settings.colorTypedEdge)
+                .onChange(async (v) => {
+                    this.plugin.settings.colorTypedEdge = v;
                     await this.plugin.saveSettings();
                 }));
 

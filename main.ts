@@ -50,6 +50,21 @@ export default class CognitiveTracePlugin extends Plugin {
                 void this.animator?.unlockAudio();
             });
             console.log("[CognitiveTrace] EventReader and GraphAnimator initialized");
+
+            // Invalidar cache de aristas tipadas cuando se modifica una nota (con debounce)
+            let typedRebuildTimer: number | null = null;
+            this.registerEvent(this.app.vault.on('modify', () => {
+                if (typedRebuildTimer != null) window.clearTimeout(typedRebuildTimer);
+                typedRebuildTimer = window.setTimeout(() => {
+                    typedRebuildTimer = null;
+                    this.animator?.buildTypedEdgesMap().then(() => {
+                        this.animator?.refresh();
+                    });
+                }, 2000);
+            }));
+
+            // Construir mapa inicial de aristas tipadas
+            this.animator?.buildTypedEdgesMap();
         } catch (e) {
             console.error("[CognitiveTrace] Failed to init components:", e);
             return;

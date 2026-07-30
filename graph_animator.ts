@@ -30,6 +30,8 @@ export class GraphAnimator {
     // Se conserva hasta que el renderer tenga el nodo (la indexación de un
     // archivo nuevo puede llegar después del evento new).
     private pendingAppearances = new Set<string>();
+    // Mapa de aristas tipadas: fuente → set de destinos (desde links: en frontmatter)
+    private typedEdges: Map<string, Set<string>> | null = null;
     private pulses: Array<{ node: any; gfx: any; renderer: any; start: number; rgb: number; dur: number; beacon: boolean }> = [];
     private pulseRaf: number | null = null;
     // Revelado en cascada de result_nodes (orden BFS del traverse → onda por profundidad)
@@ -538,6 +540,66 @@ export class GraphAnimator {
         this.patchAndRefresh();
     }
 
+    /** Parsear links: del frontmatter de todas las notas del vault.
+     *  Construye Map<sourceRelPath, Set<targetRelPath>>.
+     *  Los targets se resuelven relativo al vault root (sin .md).
+     *  Async: usa vault.read() que es Promise-based. */
+    async buildTypedEdgesMap(): Promise<Map<string, Set<string>>> {
+        const map = new Map<string, Set<string>>();
+        try {
+            const files = this.app.vault.getMarkdownFiles();
+            for (const file of files) {
+                try {
+                    const content = await this.app.vault.read(file);
+                    const fm = this.parseFrontmatterLinks(content);
+                    if (!fm || fm.length === 0) continue;
+                    const sourceSlug = file.path.replace(/\.md$/, "");
+                    for (const link of fm) {
+                        const target = link.target || "";
+                        if (!target) continue;
+                        const targetSlug = target.replace(/\.md$/, "");
+                        if (!map.has(sourceSlug)) map.set(sourceSlug, new Set());
+                        map.get(sourceSlug)!.add(targetSlug);
+                    }
+                } catch (_) { /* archivo ilegible, skip */ }
+            }
+        } catch (_) { /* vault no accesible */ }
+        this.typedEdges = map;
+        return map;
+    }
+
+    /** Extraer el array links: del frontmatter YAML de un archivo.
+     *  Parser ligero: busca el bloque --- ... --- y extrae la sección links:. */
+    private parseFrontmatterLinks(content: string): Array<{target: string; type: string}> {
+        if (!content.startsWith("---")) return [];
+        const end = content.indexOf("\n---", 3);
+        if (end === -1) return [];
+        const fm = content.substring(3, end);
+        // Buscar sección links:
+        const linksMatch = fm.match(/^links:\s*\n((?:\s+-\s+target:.*\n(?:\s+type:.*\n)?)+)/m);
+        if (!linksMatch) return [];
+        const linksBlock = linksMatch[1];
+        const result: Array<{target: string; type: string}> = [];
+        const entries = linksBlock.split(/\n\s*-/).filter(Boolean);
+        for (const entry of entries) {
+            const targetMatch = entry.match(/target:\s*(\S+)/);
+            const typeMatch = entry.match(/type:\s*(\S+)/);
+            if (targetMatch) {
+                result.push({
+                    target: targetMatch[1],
+                    type: typeMatch ? typeMatch[1] : "",
+                });
+            }
+        }
+        return result;
+    }
+
+    /** Invalidar el cache de aristas tipadas. Se reconstruye en la próxima pasada. */
+    invalidateTypedEdges(): void {
+        this.typedEdges = null;
+        this.patchAndRefresh();
+    }
+
     private patchAndRefresh(): void {
         for (const leaf of this.app.workspace.getLeavesOfType("graph")) {
             const r = (leaf.view as any)?.renderer;
@@ -769,7 +831,31 @@ export class GraphAnimator {
         this.patchLinkRender(r);
         const gold = this.hex(this.settings.colorCurrent);
         const neutral = this.hex(this.settings.colorVisited);
+        // ── Modo aristas tipadas: ocultar wikilinks, mostrar solo links: del frontmatter ──
+        const typedMode = this.settings.showTypedEdgesOnly;
+        const typedColor = typedMode ? this.hex(this.settings.colorTypedEdge) : 0;
         for (const link of r.links) {
+            // ── Filtro de aristas tipadas ──
+            if (typedMode && this.typedEdges) {
+                const srcId: string = (link.source?.id || "").replace(/\.md$/, "");
+                const tgtId: string = (link.target?.id || "").replace(/\.md$/, "");
+                const targets = this.typedEdges.get(srcId);
+                const isTyped = targets?.has(tgtId) || false;
+                if (isTyped) {
+                    if (link.$ctColor !== typedColor) {
+                        link.$ctColor = typedColor;
+                        link.$ctAnimBaseWidth = typeof link.line?.width === "number" ? link.line.width : null;
+                        link.$ctAnimStart = performance.now();
+                        link.$ctAnimDur = 500;
+                    }
+                } else {
+                    if (link.$ctColor != null) link.$ctColor = null;
+                    link.$ctAnimStart = null;
+                    link.$ctAnimBaseWidth = null;
+                }
+                continue;
+            }
+            // ── Comportamiento normal: colorear aristas entre nodos iluminados ──
             const sc = link.source?.color;
             const tc = link.target?.color;
             if (sc && tc) {
